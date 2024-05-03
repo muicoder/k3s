@@ -48,6 +48,7 @@ func main() {
 			secretsencrypt.Reencrypt,
 		),
 		cmds.NewCertCommands(
+			cert.Check,
 			cert.Rotate,
 			cert.RotateCA,
 		),
