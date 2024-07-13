@@ -740,7 +740,7 @@ func genEncryptionConfigAndState(controlConfig *config.Control) error {
 		return nil
 	}
 
-	aescbcKey := make([]byte, aescbcKeySize, aescbcKeySize)
+	aescbcKey := make([]byte, aescbcKeySize)
 	_, err := cryptorand.Read(aescbcKey)
 	if err != nil {
 		return err
