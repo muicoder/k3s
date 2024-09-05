@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
@@ -74,7 +73,6 @@ func StartServer(ctx context.Context, config *Config, cfg *cmds.Server) error {
 			return errors.Wrap(err, "startup hook")
 		}
 	}
-
 	go startOnAPIServerReady(ctx, config)
 
 	if err := printTokens(&config.ControlConfig); err != nil {
@@ -168,8 +166,8 @@ func apiserverControllers(ctx context.Context, sc *Context, config *Config) {
 		}
 	}
 
-	// Re-run context startup after core and leader-elected controllers have started. Additional
-	// informer caches may need to start for the newly added OnChange callbacks.
+	// Re-run informer factory startup after core and leader-elected controllers have started.
+	// Additional caches may need to start for the newly added OnChange/OnRemove callbacks.
 	if err := sc.Start(ctx); err != nil {
 		panic(errors.Wrap(err, "failed to start wranger controllers"))
 	}
@@ -221,7 +219,7 @@ func coreControllers(ctx context.Context, sc *Context, config *Config) error {
 			return err
 		}
 
-		apply := apply.New(k8s, apply.NewClientFactory(restConfig)).WithDynamicLookup()
+		apply := apply.New(k8s, apply.NewClientFactory(restConfig)).WithDynamicLookup().WithSetOwnerReference(false, false)
 		helm := sc.Helm.WithAgent(restConfig.UserAgent)
 		batch := sc.Batch.WithAgent(restConfig.UserAgent)
 		auth := sc.Auth.WithAgent(restConfig.UserAgent)
@@ -244,16 +242,6 @@ func coreControllers(ctx context.Context, sc *Context, config *Config) error {
 			core.V1().ServiceAccount(),
 			core.V1().ConfigMap(),
 			core.V1().Secret())
-	}
-
-	if config.ControlConfig.EncryptSecrets {
-		if err := secretsencrypt.Register(ctx,
-			sc.K8s,
-			&config.ControlConfig,
-			sc.Core.Core().V1().Node(),
-			sc.Core.Core().V1().Secret()); err != nil {
-			return err
-		}
 	}
 
 	if config.ControlConfig.Rootless {
@@ -293,10 +281,6 @@ func stageFiles(ctx context.Context, sc *Context, controlConfig *config.Control)
 	}
 
 	skip := controlConfig.Skips
-	if !skip["traefik"] && isHelmChartTraefikV1(sc) {
-		logrus.Warn("Skipping Traefik v2 deployment due to existing Traefik v1 installation")
-		skip["traefik"] = true
-	}
 	if err := deploy.Stage(dataDir, templateVars, skip); err != nil {
 		return err
 	}
@@ -341,23 +325,6 @@ func addrTypesPrioTemplate(flannelExternal bool) string {
 	}
 
 	return "InternalIP,ExternalIP,Hostname"
-}
-
-// isHelmChartTraefikV1 checks for an existing HelmChart resource with spec.chart containing traefik-1,
-// as deployed by the legacy chart (https://%{KUBERNETES_API}%/static/charts/traefik-1.81.0.tgz)
-func isHelmChartTraefikV1(sc *Context) bool {
-	prefix := "traefik-1."
-	helmChart, err := sc.Helm.Helm().V1().HelmChart().Get(metav1.NamespaceSystem, "traefik", metav1.GetOptions{})
-	if err != nil {
-		logrus.WithError(err).Info("Failed to get existing traefik HelmChart")
-		return false
-	}
-	chart := path.Base(helmChart.Spec.Chart)
-	if strings.HasPrefix(chart, prefix) {
-		logrus.WithField("chart", chart).Info("Found existing traefik v1 HelmChart")
-		return true
-	}
-	return false
 }
 
 func HomeKubeConfig(write, rootless bool) (string, error) {
@@ -474,6 +441,13 @@ func writeKubeConfig(certs string, config *Config) error {
 		}
 	} else {
 		util.SetFileModeForPath(kubeConfig, os.FileMode(0600))
+	}
+
+	if config.ControlConfig.KubeConfigGroup != "" {
+		err := util.SetFileGroupForPath(kubeConfig, config.ControlConfig.KubeConfigGroup)
+		if err != nil {
+			logrus.Errorf("Failed to set %s to group %s: %v", kubeConfig, config.ControlConfig.KubeConfigGroup, err)
+		}
 	}
 
 	if kubeConfigSymlink != kubeConfig {

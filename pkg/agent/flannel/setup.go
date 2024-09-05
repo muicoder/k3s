@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
@@ -37,12 +36,6 @@ const (
 
 	hostGWBackend = `{
 	"Type": "host-gw"
-}`
-
-	ipsecBackend = `{
-	"Type": "ipsec",
-	"UDPEncap": true,
-	"PSK": "%psk%"
 }`
 
 	tailscaledBackend = `{
@@ -195,24 +188,10 @@ func createFlannelConf(nodeConfig *config.Node) error {
 	}
 
 	var backendConf string
-	parts := strings.SplitN(nodeConfig.FlannelBackend, "=", 2)
-	backend := parts[0]
 	backendOptions := make(map[string]string)
-	if len(parts) > 1 {
-		logrus.Warnf("The additional options through flannel-backend are deprecated and will be removed in k3s v1.27, use flannel-conf instead")
-		options := strings.Split(parts[1], ",")
-		for _, o := range options {
-			p := strings.SplitN(o, "=", 2)
-			if len(p) == 1 {
-				backendOptions[p[0]] = ""
-			} else {
-				backendOptions[p[0]] = p[1]
-			}
-		}
-	}
 
 	// precheck and error out unsupported flannel backends.
-	switch backend {
+	switch nodeConfig.FlannelBackend {
 	case config.FlannelBackendHostGW:
 	case config.FlannelBackendTailscale:
 	case config.FlannelBackendWireguardNative:
@@ -226,14 +205,6 @@ func createFlannelConf(nodeConfig *config.Node) error {
 		backendConf = vxlanBackend
 	case config.FlannelBackendHostGW:
 		backendConf = hostGWBackend
-	case config.FlannelBackendIPSEC:
-		backendConf = strings.ReplaceAll(ipsecBackend, "%psk%", nodeConfig.AgentConfig.IPSECPSK)
-		if _, err := exec.LookPath("swanctl"); err != nil {
-			return errors.Wrap(err, "k3s no longer includes strongswan - please install strongswan's swanctl and charon packages on your host")
-		}
-		logrus.Warnf("The ipsec backend is deprecated and will be removed in k3s v1.27; please switch to wireguard-native. Check our docs for information on how to migrate.")
-	case config.FlannelBackendWireguard:
-		logrus.Fatalf("The wireguard backend was deprecated in K3s v1.26, please switch to wireguard-native. Check our docs at docs.k3s.io/installation/network-options for information about how to migrate.")
 	case config.FlannelBackendTailscale:
 		var routes string
 		switch netMode {

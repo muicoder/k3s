@@ -3,7 +3,10 @@ set -e
 
 SCRIPT_DIR=$(dirname $0)
 pushd $SCRIPT_DIR
-
+export ARCH=$(go env GOHOSTARCH)
+go mod tidy
+go mod vendor
+git diff | grep "^[+-]" || true
 ./download
 ./validate
 ./build

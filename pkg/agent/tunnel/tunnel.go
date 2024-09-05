@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -37,6 +38,7 @@ import (
 
 var (
 	endpointDebounceDelay = time.Second
+	defaultDialer         = net.Dialer{}
 )
 
 type agentTunnel struct {
@@ -44,6 +46,7 @@ type agentTunnel struct {
 	cidrs       cidranger.Ranger
 	ports       map[string]bool
 	mode        string
+	kubeletAddr string
 	kubeletPort string
 	startTime   time.Time
 }
@@ -81,6 +84,7 @@ func Setup(ctx context.Context, config *daemonconfig.Node, proxy proxy.Proxy) er
 		cidrs:       cidranger.NewPCTrieRanger(),
 		ports:       map[string]bool{},
 		mode:        config.EgressSelectorMode,
+		kubeletAddr: config.AgentConfig.ListenAddress,
 		kubeletPort: fmt.Sprint(ports.KubeletPort),
 		startTime:   time.Now().Truncate(time.Second),
 	}
@@ -120,18 +124,33 @@ func Setup(ctx context.Context, config *daemonconfig.Node, proxy proxy.Proxy) er
 	// The loadbalancer is only disabled when there is a local apiserver.  Servers without a local
 	// apiserver load-balance to themselves initially, then switch over to an apiserver node as soon
 	// as we get some addresses from the code below.
+	var localSupervisorDefault bool
+	if addresses := proxy.SupervisorAddresses(); len(addresses) > 0 {
+		host, _, _ := net.SplitHostPort(addresses[0])
+		if host == "127.0.0.1" || host == "::1" {
+			localSupervisorDefault = true
+		}
+	}
+
 	if proxy.IsSupervisorLBEnabled() && proxy.SupervisorURL() != "" {
 		logrus.Info("Getting list of apiserver endpoints from server")
 		// If not running an apiserver locally, try to get a list of apiservers from the server we're
 		// connecting to. If that fails, fall back to querying the endpoints list from Kubernetes. This
 		// fallback requires that the server we're joining be running an apiserver, but is the only safe
 		// thing to do if its supervisor is down-level and can't provide us with an endpoint list.
-		if addresses := agentconfig.APIServers(ctx, config, proxy); len(addresses) > 0 {
-			proxy.SetSupervisorDefault(addresses[0])
+		addresses := agentconfig.APIServers(ctx, config, proxy)
+		logrus.Infof("Got apiserver addresses from supervisor: %v", addresses)
+
+		if len(addresses) > 0 {
+			if localSupervisorDefault {
+				proxy.SetSupervisorDefault(addresses[0])
+			}
 			proxy.Update(addresses)
 		} else {
 			if endpoint, _ := client.CoreV1().Endpoints(metav1.NamespaceDefault).Get(ctx, "kubernetes", metav1.GetOptions{}); endpoint != nil {
-				if addresses := util.GetAddresses(endpoint); len(addresses) > 0 {
+				addresses = util.GetAddresses(endpoint)
+				logrus.Infof("Got apiserver addresses from kubernetes endpoints: %v", addresses)
+				if len(addresses) > 0 {
 					proxy.Update(addresses)
 				}
 			}
@@ -185,7 +204,7 @@ func (a *agentTunnel) setKubeletPort(ctx context.Context, apiServerReady <-chan 
 			return false, nil
 		}
 		a.kubeletPort = kubeletPort
-		logrus.Infof("Tunnel authorizer set Kubelet Port %s", a.kubeletPort)
+		logrus.Infof("Tunnel authorizer set Kubelet Port %s", net.JoinHostPort(a.kubeletAddr, a.kubeletPort))
 		return true, nil
 	})
 }
@@ -289,7 +308,9 @@ func (a *agentTunnel) watchEndpoints(ctx context.Context, apiServerReady <-chan 
 	disconnect := map[string]context.CancelFunc{}
 	for _, address := range proxy.SupervisorAddresses() {
 		if _, ok := disconnect[address]; !ok {
-			disconnect[address] = a.connect(ctx, wg, address, tlsConfig)
+			conn := a.connect(ctx, wg, address, tlsConfig)
+			disconnect[address] = conn.cancel
+			proxy.SetHealthCheck(address, conn.connected)
 		}
 	}
 
@@ -361,7 +382,9 @@ func (a *agentTunnel) watchEndpoints(ctx context.Context, apiServerReady <-chan 
 				for _, address := range proxy.SupervisorAddresses() {
 					validEndpoint[address] = true
 					if _, ok := disconnect[address]; !ok {
-						disconnect[address] = a.connect(ctx, nil, address, tlsConfig)
+						conn := a.connect(ctx, nil, address, tlsConfig)
+						disconnect[address] = conn.cancel
+						proxy.SetHealthCheck(address, conn.connected)
 					}
 				}
 
@@ -385,7 +408,7 @@ func (a *agentTunnel) authorized(ctx context.Context, proto, address string) boo
 	logrus.Debugf("Tunnel authorizer checking dial request for %s", address)
 	host, port, err := net.SplitHostPort(address)
 	if err == nil {
-		if a.isKubeletPort(proto, host, port) {
+		if a.isKubeletOrStreamPort(proto, host, port) {
 			return true
 		}
 		if ip := net.ParseIP(host); ip != nil {
@@ -403,13 +426,22 @@ func (a *agentTunnel) authorized(ctx context.Context, proto, address string) boo
 	return false
 }
 
+type agentConnection struct {
+	cancel    context.CancelFunc
+	connected func() bool
+}
+
 // connect initiates a connection to the remotedialer server. Incoming dial requests from
 // the server will be checked by the authorizer function prior to being fulfilled.
-func (a *agentTunnel) connect(rootCtx context.Context, waitGroup *sync.WaitGroup, address string, tlsConfig *tls.Config) context.CancelFunc {
+func (a *agentTunnel) connect(rootCtx context.Context, waitGroup *sync.WaitGroup, address string, tlsConfig *tls.Config) agentConnection {
 	wsURL := fmt.Sprintf("wss://%s/v1-"+version.Program+"/connect", address)
 	ws := &websocket.Dialer{
 		TLSClientConfig: tlsConfig,
 	}
+
+	// Assume that the connection to the server will succeed, to avoid failing health checks while attempting to connect.
+	// If we cannot connect, connected will be set to false when the initial connection attempt fails.
+	connected := true
 
 	once := sync.Once{}
 	if waitGroup != nil {
@@ -417,18 +449,31 @@ func (a *agentTunnel) connect(rootCtx context.Context, waitGroup *sync.WaitGroup
 	}
 
 	ctx, cancel := context.WithCancel(rootCtx)
+	auth := func(proto, address string) bool {
+		return a.authorized(rootCtx, proto, address)
+	}
 
+	onConnect := func(_ context.Context, _ *remotedialer.Session) error {
+		connected = true
+		logrus.WithField("url", wsURL).Info("Remotedialer connected to proxy")
+		if waitGroup != nil {
+			once.Do(waitGroup.Done)
+		}
+		return nil
+	}
+
+	// Start remotedialer connect loop in a goroutine to ensure a connection to the target server
 	go func() {
 		for {
-			remotedialer.ClientConnect(ctx, wsURL, nil, ws, func(proto, address string) bool {
-				return a.authorized(rootCtx, proto, address)
-			}, func(_ context.Context, _ *remotedialer.Session) error {
-				if waitGroup != nil {
-					once.Do(waitGroup.Done)
-				}
-				return nil
-			})
-
+			// ConnectToProxy blocks until error or context cancellation
+			err := remotedialer.ConnectToProxyWithDialer(ctx, wsURL, nil, auth, ws, a.dialContext, onConnect)
+			connected = false
+			if err != nil && !errors.Is(err, context.Canceled) {
+				logrus.WithField("url", wsURL).WithError(err).Error("Remotedialer proxy error; reconnecting...")
+				// wait between reconnection attempts to avoid hammering the server
+				time.Sleep(endpointDebounceDelay)
+			}
+			// If the context has been cancelled, exit the goroutine instead of retrying
 			if ctx.Err() != nil {
 				if waitGroup != nil {
 					once.Do(waitGroup.Done)
@@ -438,10 +483,27 @@ func (a *agentTunnel) connect(rootCtx context.Context, waitGroup *sync.WaitGroup
 		}
 	}()
 
-	return cancel
+	return agentConnection{
+		cancel:    cancel,
+		connected: func() bool { return connected },
+	}
 }
 
-// isKubeletPort returns true if the connection is to a reserved TCP port on a loopback address.
-func (a *agentTunnel) isKubeletPort(proto, host, port string) bool {
+// isKubeletOrStreamPort returns true if the connection is to a reserved TCP port on a loopback address.
+func (a *agentTunnel) isKubeletOrStreamPort(proto, host, port string) bool {
 	return proto == "tcp" && (host == "127.0.0.1" || host == "::1") && (port == a.kubeletPort || port == daemonconfig.StreamServerPort)
+}
+
+// dialContext dials a local connection on behalf of the remote server.  If the
+// connection is to the kubelet port on the loopback address, the kubelet is dialed
+// at its configured bind address.  Otherwise, the connection is dialed normally.
+func (a *agentTunnel) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+	if a.isKubeletOrStreamPort(network, host, port) && port == a.kubeletPort {
+		address = net.JoinHostPort(a.kubeletAddr, port)
+	}
+	return defaultDialer.DialContext(ctx, network, address)
 }

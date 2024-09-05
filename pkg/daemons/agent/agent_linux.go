@@ -33,8 +33,7 @@ func createRootlessConfig(argsMap map[string]string, controllers map[string]bool
 
 func kubeProxyArgs(cfg *config.Agent) map[string]string {
 	bindAddress := "127.0.0.1"
-	isIPv6 := utilsnet.IsIPv6(net.ParseIP([]string{cfg.NodeIP}[0]))
-	if isIPv6 {
+	if utilsnet.IsIPv6(net.ParseIP(cfg.NodeIP)) {
 		bindAddress = "::1"
 	}
 	argsMap := map[string]string{
@@ -54,8 +53,7 @@ func kubeProxyArgs(cfg *config.Agent) map[string]string {
 
 func kubeletArgs(cfg *config.Agent) map[string]string {
 	bindAddress := "127.0.0.1"
-	isIPv6 := utilsnet.IsIPv6(net.ParseIP([]string{cfg.NodeIP}[0]))
-	if isIPv6 {
+	if utilsnet.IsIPv6(net.ParseIP(cfg.NodeIP)) {
 		bindAddress = "::1"
 	}
 	argsMap := map[string]string{
@@ -123,10 +121,19 @@ func kubeletArgs(cfg *config.Agent) map[string]string {
 	if cfg.NodeName != "" {
 		argsMap["hostname-override"] = cfg.NodeName
 	}
-	if nodeIPs := util.JoinIPs(cfg.NodeIPs); nodeIPs != "" {
+	// If the embedded CCM is disabled, don't assume that dual-stack node IPs are safe.
+	// When using an external CCM, the user wants dual-stack node IPs, they will need to set the node-ip kubelet arg directly.
+	// This should be fine since most cloud providers have their own way of finding node IPs that doesn't depend on the kubelet
+	// setting them.
+	if cfg.DisableCCM {
 		dualStack, err := utilsnet.IsDualStackIPs(cfg.NodeIPs)
 		if err == nil && !dualStack {
 			argsMap["node-ip"] = cfg.NodeIP
+		}
+	} else {
+		// Cluster is using the embedded CCM, we know that the feature-gate will be enabled there as well.
+		if nodeIPs := util.JoinIPs(cfg.NodeIPs); nodeIPs != "" {
+			argsMap["node-ip"] = util.JoinIPs(cfg.NodeIPs)
 		}
 	}
 	kubeletRoot, runtimeRoot, controllers := cgroups.CheckCgroups()

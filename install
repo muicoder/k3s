@@ -1,0 +1,208 @@
+#!/bin/sh
+case $(arch) in
+x86_64)
+  readonly ARCH=amd64
+  readonly suffix=""
+  ;;
+aarch64)
+  readonly ARCH=arm64
+  readonly suffix=-$ARCH
+  ;;
+*)
+  echo "Unsupported $(arch)"
+  exit
+  ;;
+esac
+cd "$(dirname "$(readlink -f "$0")")"
+REGISTRY_IP=$(if [ -z "$K3S_URL" ]; then echo 127.0.0.1; else echo "$K3S_URL" | sed -E 's~.+://(.+):.+~\1~g'; fi)
+readonly REGISTRY_PORT=5000
+readonly REGISTRY_USER=admin
+readonly REGISTRY_PASS=passw0rd
+set -e
+export INSTALL_K3S_BIN_DIR="${INSTALL_K3S_BIN_DIR:-/usr/bin}"    # install.bin
+export INSTALL_K3S_DATA_DIR="${INSTALL_K3S_DATA_DIR:-/data/K3S}" # install.data
+mkdir -p "$INSTALL_K3S_BIN_DIR" "$INSTALL_K3S_DATA_DIR"
+LN_DIR=/etc/rancher && {
+  rm -rf "$LN_DIR"
+  mkdir -p "$INSTALL_K3S_DATA_DIR" "${LN_DIR%/*}"
+  ln -sf "$INSTALL_K3S_DATA_DIR" "$LN_DIR"
+}
+LN_DIR=/var/lib/rancher/credentialprovider && {
+  rm -rf "$LN_DIR"
+  mkdir -p "$INSTALL_K3S_DATA_DIR.cred" "${LN_DIR%/*}"
+  ln -sf "$INSTALL_K3S_DATA_DIR.cred" "$LN_DIR"
+}
+LN_DIR=/var/lib/rancher/k3s && {
+  rm -rf "$LN_DIR"
+  mkdir -p "$INSTALL_K3S_DATA_DIR" "${LN_DIR%/*}"
+  ln -sf "$INSTALL_K3S_DATA_DIR" "$LN_DIR"
+}
+LN_DIR=/var/lib/cni && {
+  rm -rf "$LN_DIR"
+  mkdir -p "$INSTALL_K3S_DATA_DIR.cni" "${LN_DIR%/*}"
+  ln -sf "$INSTALL_K3S_DATA_DIR.cni" "$LN_DIR"
+}
+LN_DIR=/var/lib/kubelet && {
+  rm -rf "$LN_DIR"
+  mkdir -p "$INSTALL_K3S_DATA_DIR.kubelet" "${LN_DIR%/*}"
+  ln -sf "$INSTALL_K3S_DATA_DIR.kubelet" "$LN_DIR"
+}
+if [ -s .$ARCH/k3s ]; then
+  cp -a .$ARCH/k3s "$INSTALL_K3S_DATA_DIR/K3S"
+else
+  wget -qO"$INSTALL_K3S_DATA_DIR/K3S" "https://rancher-mirror.rancher.cn/k3s/${INSTALL_K3S_VERSION:-v1.26.15-k3s1}/k3s$suffix"
+fi
+echo
+env | grep K3S_ | sort
+cp -a "$INSTALL_K3S_DATA_DIR/K3S" "$INSTALL_K3S_BIN_DIR/k3s"
+chmod a+x "$INSTALL_K3S_BIN_DIR/k3s"
+echo
+if [ -z "$K3S_CONFIG_FILE" ]; then
+  readonly K3S_CONFIG_FILE="/etc/rancher/k3s/config.yaml"
+else
+  export K3S_CONFIG_FILE
+fi
+mkdir -p "${K3S_CONFIG_FILE%/*}"
+cat <<EOF >"$K3S_CONFIG_FILE"
+kubelet-arg:
+  - cpu-cfs-quota=false
+  - make-iptables-util-chains=true
+kube-proxy-arg:
+  - proxy-mode=iptables
+pause-image: rancher/mirrored-pause:3.6
+prefer-bundled-bin: true
+token: sensoro
+EOF
+configagent() {
+  cat <<EOF >>"$K3S_CONFIG_FILE"
+disable-apiserver-lb: false
+embedded-registry: true
+EOF
+}
+configserver() {
+  if [ -z "$K3S_URL" ]; then
+    cat <<EOF >>"$K3S_CONFIG_FILE"
+cluster-init: true
+embedded-registry: false
+EOF
+    echo "registry[doing]"
+    cat <<EOF >/etc/rancher/k3s/registry.config
+version: 0.1
+log:
+  fields:
+    service: registry
+storage:
+  cache:
+    blobdescriptor: inmemory
+  filesystem:
+    rootdirectory: $INSTALL_K3S_DATA_DIR
+  delete:
+    enabled: true
+http:
+  addr: :$REGISTRY_PORT
+  headers:
+    X-Content-Type-Options: [nosniff]
+proxy:
+  #remoteurl: https://harbor.sensoro.com
+  username: user
+  password: pass
+  ttl: 0
+health:
+  storagedriver:
+    enabled: true
+    interval: 10s
+    threshold: 3
+auth:
+  htpasswd:
+    realm: "Registry Realm"
+    path: /etc/rancher/k3s/registry.htpasswd
+EOF
+    cat <<EOF >/etc/systemd/system/registry.service && systemctl daemon-reload
+[Unit]
+Description=Distribution registry
+Documentation=https://distribution.github.io/distribution
+
+[Service]
+TimeoutStartSec=0
+Restart=always
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+ExecStartPre=$INSTALL_K3S_DATA_DIR/registry --version
+ExecStart=$INSTALL_K3S_DATA_DIR/registry serve /etc/rancher/k3s/registry.config
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    echo YWRtaW46JDJhJDEwJEhKaGZvTjBBTnVFTzZuUDNNb0lseWVlQUhpRTFGS29LeWZzbWw0OUVTdU9abnJVWnJiWUll | base64 -d >/etc/rancher/k3s/registry.htpasswd
+    if .$ARCH/registry --version 2>/dev/null; then
+      systemctl stop registry >/dev/null 2>&1 || true
+      cp -a .$ARCH/registry "$INSTALL_K3S_DATA_DIR"
+      systemctl restart registry
+      systemctl enable registry
+    fi
+    echo "registry[done]"
+  fi
+  readonly MF=/etc/rancher/server/manifests
+  mkdir -p "$MF"
+  for str in controller-gen.kubebuilder.io managed-by: helm.sh; do
+    grep $str -rl manifests* | while read -r f; do sed "/$str/d" "$f" >.yaml && mv .yaml "$f"; done
+  done
+  cp -a manifests/* "$MF"
+  if [ -d .common ] && [ -d .$ARCH ]; then
+    cp -a .common/* .$ARCH/* "$INSTALL_K3S_BIN_DIR"
+  fi
+  cat <<EOF >>"$K3S_CONFIG_FILE"
+cluster-cidr: 172.31.0.0/17
+service-cidr: 172.31.128.0/18
+cluster-dns: 172.31.128.10
+flannel-backend: host-gw
+write-kubeconfig: $HOME/.kube/config
+write-kubeconfig-mode: 600
+helm-job-image: rancher/klipper-helm:v0.9.2-build20240828
+disable:
+ - servicelb
+ - traefik
+disable-cloud-controller: true
+disable-network-policy: true
+disable-helm-controller: false
+node-label:
+ - operator
+EOF
+}
+if ! [ -s .install ]; then
+  wget -qO.install https://rancher-mirror.rancher.cn/k3s/k3s-install.sh
+fi
+if [ "$(dirname "$(readlink -f "$0")")" = "$PWD" ]; then
+  find manifests -type f
+  exit
+else
+  echo "CATTLE_NEW_SIGNED_CERT_EXPIRATION_DAYS  https://github.com/rancher/dynamiclistener"
+  sed "s~/var/lib/kubelet~$INSTALL_K3S_DATA_DIR.kubelet~g" .install |
+    sed "s~create_env_file$~create_env_file\necho GOLANG_PROTOBUF_REGISTRATION_CONFLICT=ignore >>\$FILE_K3S_ENV~" |
+    sed "s~create_env_file$~create_env_file\necho CATTLE_NEW_SIGNED_CERT_EXPIRATION_DAYS=$((365 * 5)) >>\$FILE_K3S_ENV~" >k3s-install.sh
+fi
+if ! k3s check-config; then
+  k3s-killall.sh >/dev/null 2>&1 || true
+  exit
+fi
+cat <<EOF >"${K3S_CONFIG_FILE%/*}/registries.yaml"
+mirrors:
+  "*":
+    endpoint:
+      - http://$REGISTRY_IP:$REGISTRY_PORT
+configs:
+  $REGISTRY_IP:$REGISTRY_PORT:
+    auth:
+      username: $REGISTRY_USER
+      password: $REGISTRY_PASS
+EOF
+if echo "$*" | grep -q agent; then
+  configagent
+else
+  configserver
+fi
+export INSTALL_K3S_FORCE_RESTART=true
+export INSTALL_K3S_SKIP_DOWNLOAD=true
+export INSTALL_K3S_SYMLINK=force
+exec sh k3s-install.sh "$@"
