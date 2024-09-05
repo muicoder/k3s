@@ -1,23 +1,5 @@
 name: E2E Test Coverage
 on: 
-  push:
-    paths-ignore:
-      - "**.md"
-      - "channel.yaml"
-      - "install.sh"
-      - "tests/**"
-      - "!tests/e2e**"
-      - ".github/**"
-      - "!.github/workflows/e2e.yaml"
-  pull_request:
-    paths-ignore:
-      - "**.md"
-      - "channel.yaml"
-      - "install.sh"
-      - "tests/**"
-      - "!tests/e2e**"
-      - ".github/**"
-      - "!.github/workflows/e2e.yaml"
   workflow_dispatch: {}
 
 permissions:

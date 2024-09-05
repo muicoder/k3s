@@ -1,13 +1,6 @@
 ARG GOLANG=golang:1.21.8-alpine3.18
-FROM ${GOLANG}
+FROM ${GOLANG} AS build
 
-# Set proxy environment variables
-ARG http_proxy
-ARG https_proxy
-ARG no_proxy
-ENV http_proxy=${http_proxy} \
-    https_proxy=${https_proxy} \
-    no_proxy=${no_proxy}
 
 # Install necessary packages
 RUN apk -U --no-cache add \
@@ -15,8 +8,7 @@ RUN apk -U --no-cache add \
     zlib-dev tar zip squashfs-tools npm coreutils python3 py3-pip openssl-dev libffi-dev libseccomp \
     libseccomp-dev libseccomp-static make libuv-static sqlite-dev sqlite-static libselinux \
     libselinux-dev zlib-dev zlib-static zstd pigz alpine-sdk binutils-gold btrfs-progs-dev \
-    btrfs-progs-static gawk yq \
-    && [ "$(go env GOARCH)" = "amd64" ] && apk -U --no-cache add mingw-w64-gcc || true
+    btrfs-progs-static gawk yq
 
 # Install AWS CLI
 RUN python3 -m pip install awscli
@@ -41,27 +33,14 @@ RUN GOPROXY=direct go install golang.org/x/tools/cmd/goimports@gopls/v0.11.0
 # Cleanup
 RUN rm -rf /go/src /go/pkg
 
-# Install golangci-lint for amd64
-RUN if [ "$(go env GOARCH)" = "amd64" ]; then \
-    curl -sL https://raw.githubusercontent.com/golangci/golangci-lint/v1.51.2/install.sh | sh -s -- v1.51.2;  \
-    fi
 
 # Set SELINUX environment variable
 ARG SELINUX=true
-ENV SELINUX=${SELINUX}
+ENV STATIC_BUILD=true DOCKER_BUILDKIT=1 SKIP_AIRGAP=1
 
-# Set Dapper configuration variables
-ENV DAPPER_RUN_ARGS="--privileged -v k3s-cache:/go/src/github.com/k3s-io/k3s/.cache -v trivy-cache:/root/.cache/trivy" \
-    DAPPER_ENV="REPO TAG DRONE_TAG IMAGE_NAME SKIP_VALIDATE SKIP_IMAGE SKIP_AIRGAP AWS_SECRET_ACCESS_KEY AWS_ACCESS_KEY_ID GITHUB_TOKEN GOLANG GOCOVER DEBUG" \
-    DAPPER_SOURCE="/go/src/github.com/k3s-io/k3s/" \
-    DAPPER_OUTPUT="./bin ./dist ./build/out ./build/static ./pkg/static ./pkg/deploy" \
-    DAPPER_DOCKER_SOCKET=true \
-    CROSS=true \
-    STATIC_BUILD=true
-# Set $HOME separately because it refers to $DAPPER_SOURCE, set above
-ENV HOME=${DAPPER_SOURCE}
+WORKDIR /go/src/github.com/k3s-io/k3s
+COPY . .
 
-WORKDIR ${DAPPER_SOURCE}
-
-ENTRYPOINT ["./scripts/entry.sh"]
-CMD ["ci"]
+RUN bash scripts/ci;find bin dist -type f -print0 | xargs -0 file;cp -av dist/artifacts/k3s* /tmp/k3s-$(go env GOARCH)
+FROM busybox:1.36.1
+COPY --from=build /tmp/k3s-* /

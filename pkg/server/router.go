@@ -245,6 +245,7 @@ func servingKubeletCert(server *config.Control, keyFile string, auth nodePassBoo
 
 		cert, err := certutil.NewSignedCert(certutil.Config{
 			CommonName: nodeName,
+			ExpiresAt:  0, // by CATTLE_NEW_SIGNED_CERT_EXPIRATION_DAYS
 			Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 			AltNames: certutil.AltNames{
 				DNSNames: []string{nodeName, "localhost"},
@@ -288,6 +289,7 @@ func clientKubeletCert(server *config.Control, keyFile string, auth nodePassBoot
 
 		cert, err := certutil.NewSignedCert(certutil.Config{
 			CommonName:   "system:node:" + nodeName,
+			ExpiresAt:    0, // by CATTLE_NEW_SIGNED_CERT_EXPIRATION_DAYS
 			Organization: []string{user.NodesGroup},
 			Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		}, key, caCerts[0], caKey)

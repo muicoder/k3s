@@ -17,7 +17,7 @@ PKG_KUBE_ROUTER="github.com/cloudnativelabs/kube-router/v2"
 PKG_CRI_DOCKERD="github.com/Mirantis/cri-dockerd"
 PKG_ETCD="go.etcd.io/etcd"
 
-buildDate=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+readonly buildDate=2024-03-30T21:30:48-07:00 # git show --pretty=format:"%cI" HEAD^ | head -1
 
 VERSIONFLAGS="
     -X ${PKG}/pkg/version.Version=${VERSION}
@@ -34,21 +34,21 @@ VERSIONFLAGS="
     -X ${PKG_K8S_BASE}/version.gitTreeState=${TREE_STATE}
     -X ${PKG_K8S_BASE}/version.buildDate=${buildDate}
 
-    -X ${PKG_CRICTL}/version.Version=${VERSION_CRICTL}
+    -X ${PKG_CRICTL}/version.Version=${VERSION_CRICTL%%-*}
 
-    -X ${PKG_CONTAINERD}/version.Version=${VERSION_CONTAINERD}
+    -X ${PKG_CONTAINERD}/version.Version=${VERSION_CONTAINERD%%-*}
     -X ${PKG_CONTAINERD}/version.Package=${PKG_CONTAINERD_K3S}
 
-    -X ${PKG_CNI_PLUGINS}/pkg/utils/buildversion.BuildVersion=${VERSION_CNIPLUGINS}
+    -X ${PKG_CNI_PLUGINS}/pkg/utils/buildversion.BuildVersion=${VERSION_CNIPLUGINS%%-*}
     -X ${PKG_CNI_PLUGINS}/plugins/meta/flannel.Program=flannel
-    -X ${PKG_CNI_PLUGINS}/plugins/meta/flannel.Version=${VERSION_FLANNEL_PLUGIN}+${VERSION_FLANNEL}
+    -X ${PKG_CNI_PLUGINS}/plugins/meta/flannel.Version=${VERSION_FLANNEL_PLUGIN%%-*}+${VERSION_FLANNEL}
     -X ${PKG_CNI_PLUGINS}/plugins/meta/flannel.Commit=HEAD
     -X ${PKG_CNI_PLUGINS}/plugins/meta/flannel.buildDate=${buildDate}
 
     -X ${PKG_KUBE_ROUTER}/pkg/version.Version=${VERSION_KUBE_ROUTER}
     -X ${PKG_KUBE_ROUTER}/pkg/version.BuildDate=${buildDate}
 
-    -X ${PKG_CRI_DOCKERD}/cmd/version.Version=${VERSION_CRI_DOCKERD}
+    -X ${PKG_CRI_DOCKERD}/cmd/version.Version=${VERSION_CRI_DOCKERD%%-*}
     -X ${PKG_CRI_DOCKERD}/cmd/version.GitCommit=HEAD
     -X ${PKG_CRI_DOCKERD}/cmd/version.BuildTime=${buildDate}
 

@@ -208,7 +208,7 @@ func preloadFile(ctx context.Context, cfg *config.Node, client *containerd.Clien
 		defer imageReader.Close()
 
 		logrus.Infof("Importing images from %s", filePath)
-		images, err = client.Import(ctx, imageReader, containerd.WithAllPlatforms(true))
+		images, err = client.Import(ctx, imageReader, containerd.WithAllPlatforms(true), containerd.WithSkipMissing())
 		if err != nil {
 			return errors.Wrap(err, "failed to import images from "+filePath)
 		}
@@ -353,19 +353,23 @@ func prePullImages(ctx context.Context, client *containerd.Client, imageClient r
 	scanner := bufio.NewScanner(imageList)
 	for scanner.Scan() {
 		name := strings.TrimSpace(scanner.Text())
-		if _, err := imageClient.ImageStatus(ctx, &runtimeapi.ImageStatusRequest{
+
+		if status, err := imageClient.ImageStatus(ctx, &runtimeapi.ImageStatusRequest{
 			Image: &runtimeapi.ImageSpec{
 				Image: name,
 			},
-		}); err == nil {
+		}); err == nil && status.Image != nil && len(status.Image.RepoTags) > 0 {
 			logrus.Infof("Image %s has already been pulled", name)
-			if image, err := imageService.Get(ctx, name); err != nil {
-				errs = append(errs, err)
-			} else {
-				images = append(images, image)
+			for _, tag := range status.Image.RepoTags {
+				if image, err := imageService.Get(ctx, tag); err != nil {
+					errs = append(errs, err)
+				} else {
+					images = append(images, image)
+				}
 			}
 			continue
 		}
+
 		logrus.Infof("Pulling image %s", name)
 		if _, err := imageClient.PullImage(ctx, &runtimeapi.PullImageRequest{
 			Image: &runtimeapi.ImageSpec{
