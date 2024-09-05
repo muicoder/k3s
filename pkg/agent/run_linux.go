@@ -4,16 +4,12 @@
 package agent
 
 import (
+	"github.com/k3s-io/k3s/pkg/version"
 	"os"
 	"path/filepath"
 
 	"github.com/k3s-io/k3s/pkg/cli/cmds"
 	"github.com/k3s-io/k3s/pkg/daemons/config"
-)
-
-const (
-	criDockerdSock = "unix:///run/k3s/cri-dockerd/cri-dockerd.sock"
-	containerdSock = "unix:///run/k3s/containerd/containerd.sock"
 )
 
 // setupCriCtlConfig creates the crictl config file and populates it
@@ -23,9 +19,9 @@ func setupCriCtlConfig(cfg cmds.Agent, nodeConfig *config.Node) error {
 	if cre == "" {
 		switch {
 		case cfg.Docker:
-			cre = criDockerdSock
+			cre = "unix:///run/" + version.Program + "/cri-dockerd/cri-dockerd.sock"
 		default:
-			cre = containerdSock
+			cre = "unix:///run/" + version.Program + "/containerd/containerd.sock"
 		}
 	}
 
