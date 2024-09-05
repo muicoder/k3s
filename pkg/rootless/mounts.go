@@ -5,6 +5,7 @@ package rootless
 
 import (
 	"fmt"
+	"github.com/k3s-io/k3s/pkg/version"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -36,7 +37,7 @@ func setupMounts(stateDir string) error {
 		{"/var/lib/cni", filepath.Join(stateDir, "cni")},
 		{"/var/lib/kubelet", filepath.Join(stateDir, "kubelet")},
 		{"/etc/rancher", filepath.Join(stateDir, "etc", "rancher")},
-		{"/run/k3s/containerd", filepath.Join(runDir, "k3s", "containerd")},
+		{"/run/" + version.Program + "/containerd", filepath.Join(runDir, version.Program, "containerd")},
 	}
 
 	for _, v := range mountMap {

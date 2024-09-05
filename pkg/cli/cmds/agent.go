@@ -20,13 +20,17 @@ type Agent struct {
 	LBServerPort             int
 	ResolvConf               string
 	DataDir                  string
+	BindAddress              string
 	NodeIP                   cli.StringSlice
 	NodeExternalIP           cli.StringSlice
+	NodeInternalDNS          cli.StringSlice
+	NodeExternalDNS          cli.StringSlice
 	NodeName                 string
 	PauseImage               string
 	Snapshotter              string
 	Docker                   bool
 	ContainerdNoDefault      bool
+	ContainerdNonrootDevices bool
 	ContainerRuntimeEndpoint string
 	DefaultRuntime           string
 	ImageServiceEndpoint     string
@@ -36,6 +40,7 @@ type Agent struct {
 	VPNAuth                  string
 	VPNAuthFile              string
 	Debug                    bool
+	EnablePProf              bool
 	Rootless                 bool
 	RootlessAlreadyUnshared  bool
 	WithNodeID               bool
@@ -78,6 +83,16 @@ var (
 		Usage: "(agent/networking) IPv4/IPv6 external IP addresses to advertise for node",
 		Value: &AgentConfig.NodeExternalIP,
 	}
+	NodeInternalDNSFlag = &cli.StringSliceFlag{
+		Name:  "node-internal-dns",
+		Usage: "(agent/networking) internal DNS addresses to advertise for node",
+		Value: &AgentConfig.NodeInternalDNS,
+	}
+	NodeExternalDNSFlag = &cli.StringSliceFlag{
+		Name:  "node-external-dns",
+		Usage: "(agent/networking) external DNS addresses to advertise for node",
+		Value: &AgentConfig.NodeExternalDNS,
+	}
 	NodeNameFlag = &cli.StringFlag{
 		Name:        "node-name",
 		Usage:       "(agent/node) Node name",
@@ -109,7 +124,7 @@ var (
 	}
 	DockerFlag = &cli.BoolFlag{
 		Name:        "docker",
-		Usage:       "(agent/runtime) (experimental) Use cri-dockerd instead of containerd",
+		Usage:       "(agent/runtime) Use cri-dockerd instead of containerd",
 		Destination: &AgentConfig.Docker,
 	}
 	CRIEndpointFlag = &cli.StringFlag{
@@ -168,13 +183,13 @@ var (
 	}
 	VPNAuth = &cli.StringFlag{
 		Name:        "vpn-auth",
-		Usage:       "(agent/networking) (experimental) Credentials for the VPN provider. It must include the provider name and join key in the format name=<vpn-provider>,joinKey=<key>[,controlServerURL=<url>][,extraArgs=<args>]",
+		Usage:       "(agent/networking) Credentials for the VPN provider. It must include the provider name and join key in the format name=<vpn-provider>,joinKey=<key>[,controlServerURL=<url>][,extraArgs=<args>]",
 		EnvVar:      version.ProgramUpper + "_VPN_AUTH",
 		Destination: &AgentConfig.VPNAuth,
 	}
 	VPNAuthFile = &cli.StringFlag{
 		Name:        "vpn-auth-file",
-		Usage:       "(agent/networking) (experimental) File containing credentials for the VPN provider. It must include the provider name and join key in the format name=<vpn-provider>,joinKey=<key>[,controlServerURL=<url>][,extraArgs=<args>]",
+		Usage:       "(agent/networking) File containing credentials for the VPN provider. It must include the provider name and join key in the format name=<vpn-provider>,joinKey=<key>[,controlServerURL=<url>][,extraArgs=<args>]",
 		EnvVar:      version.ProgramUpper + "_VPN_AUTH_FILE",
 		Destination: &AgentConfig.VPNAuthFile,
 	}
@@ -218,13 +233,28 @@ var (
 	}
 	DisableAgentLBFlag = &cli.BoolFlag{
 		Name:        "disable-apiserver-lb",
-		Usage:       "(agent/networking) (experimental) Disable the agent's client-side load-balancer and connect directly to the configured server address",
+		Usage:       "(agent/networking) Disable the agent's client-side load-balancer and connect directly to the configured server address",
 		Destination: &AgentConfig.DisableLoadBalancer,
 	}
 	DisableDefaultRegistryEndpointFlag = &cli.BoolFlag{
 		Name:        "disable-default-registry-endpoint",
 		Usage:       "(agent/containerd) Disables containerd's fallback default registry endpoint when a mirror is configured for that registry",
 		Destination: &AgentConfig.ContainerdNoDefault,
+	}
+	NonrootDevicesFlag = &cli.BoolFlag{
+		Name:        "nonroot-devices",
+		Usage:       "(agent/containerd) Allows non-root pods to access devices by setting device_ownership_from_security_context=true in the containerd CRI config",
+		Destination: &AgentConfig.ContainerdNonrootDevices,
+	}
+	EnablePProfFlag = &cli.BoolFlag{
+		Name:        "enable-pprof",
+		Usage:       "Enable pprof endpoint on supervisor port",
+		Destination: &AgentConfig.EnablePProf,
+	}
+	BindAddressFlag = &cli.StringFlag{
+		Name:        "bind-address",
+		Usage:       "(listener) " + version.Program + " bind address (default: 0.0.0.0)",
+		Destination: &AgentConfig.BindAddress,
 	}
 )
 
@@ -254,11 +284,14 @@ func NewAgentCommand(action func(ctx *cli.Context) error) cli.Command {
 				EnvVar:      version.ProgramUpper + "_URL",
 				Destination: &AgentConfig.ServerURL,
 			},
+			// Note that this is different from DataDirFlag used elswhere in the CLI,
+			// as this is bound to AgentConfig instead of ServerConfig.
 			&cli.StringFlag{
 				Name:        "data-dir,d",
 				Usage:       "(agent/data) Folder to hold state",
 				Destination: &AgentConfig.DataDir,
 				Value:       "/var/lib/rancher/" + version.Program + "",
+				EnvVar:      version.ProgramUpper + "_DATA_DIR",
 			},
 			NodeNameFlag,
 			WithNodeIDFlag,
@@ -276,9 +309,13 @@ func NewAgentCommand(action func(ctx *cli.Context) error) cli.Command {
 			SnapshotterFlag,
 			PrivateRegistryFlag,
 			DisableDefaultRegistryEndpointFlag,
+			NonrootDevicesFlag,
 			AirgapExtraRegistryFlag,
 			NodeIPFlag,
+			BindAddressFlag,
 			NodeExternalIPFlag,
+			NodeInternalDNSFlag,
+			NodeExternalDNSFlag,
 			ResolvConfFlag,
 			FlannelIfaceFlag,
 			FlannelConfFlag,
@@ -286,9 +323,10 @@ func NewAgentCommand(action func(ctx *cli.Context) error) cli.Command {
 			ExtraKubeletArgs,
 			ExtraKubeProxyArgs,
 			// Experimental flags
+			EnablePProfFlag,
 			&cli.BoolFlag{
 				Name:        "rootless",
-				Usage:       "(experimental) Run rootless",
+				Usage:       "Run rootless",
 				Destination: &AgentConfig.Rootless,
 			},
 			PreferBundledBin,

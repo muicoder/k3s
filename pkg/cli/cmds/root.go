@@ -19,7 +19,7 @@ var (
 	}
 	PreferBundledBin = &cli.BoolFlag{
 		Name:  "prefer-bundled-bin",
-		Usage: "(experimental) Prefer bundled userspace binaries over host binaries",
+		Usage: "Prefer bundled userspace binaries over host binaries",
 	}
 )
 
@@ -41,10 +41,7 @@ func NewApp() *cli.App {
 	}
 	app.Flags = []cli.Flag{
 		DebugFlag,
-		&cli.StringFlag{
-			Name:  "data-dir,d",
-			Usage: "(data) Folder to hold state (default: /var/lib/rancher/" + version.Program + " or ${HOME}/.rancher/" + version.Program + " if not root)",
-		},
+		DataDirFlag,
 	}
 
 	return app

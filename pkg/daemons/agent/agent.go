@@ -18,7 +18,6 @@ import (
 
 func Agent(ctx context.Context, nodeConfig *daemonconfig.Node, proxy proxy.Proxy) error {
 	rand.Seed(time.Now().UTC().UnixNano())
-
 	logs.InitLogs()
 	defer logs.FlushLogs()
 

@@ -28,9 +28,7 @@ import (
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/clientcmd"
 	toolswatch "k8s.io/client-go/tools/watch"
-	ccm "k8s.io/cloud-provider"
 	cloudprovider "k8s.io/cloud-provider"
 	cloudproviderapi "k8s.io/cloud-provider/api"
 	ccmapp "k8s.io/cloud-provider/app"
@@ -38,7 +36,7 @@ import (
 	ccmopt "k8s.io/cloud-provider/options"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
-	"k8s.io/kubernetes/cmd/kube-apiserver/app"
+	apiapp "k8s.io/kubernetes/cmd/kube-apiserver/app"
 	cmapp "k8s.io/kubernetes/cmd/kube-controller-manager/app"
 	proxy "k8s.io/kubernetes/cmd/kube-proxy/app"
 	sapp "k8s.io/kubernetes/cmd/kube-scheduler/app"
@@ -126,12 +124,12 @@ func (e *Embedded) KubeProxy(ctx context.Context, args []string) error {
 }
 
 func (*Embedded) APIServerHandlers(ctx context.Context) (authenticator.Request, http.Handler, error) {
-	startupConfig := <-app.StartupConfig
+	startupConfig := <-apiapp.StartupConfig
 	return startupConfig.Authenticator, startupConfig.Handler, nil
 }
 
 func (*Embedded) APIServer(ctx context.Context, etcdReady <-chan struct{}, args []string) error {
-	command := app.NewAPIServerCommand(ctx.Done())
+	command := apiapp.NewAPIServerCommand(ctx.Done())
 	command.SetArgs(args)
 
 	go func() {
@@ -215,7 +213,7 @@ func (*Embedded) CloudControllerManager(ctx context.Context, ccmRBACReady <-chan
 	}
 
 	cloudInitializer := func(config *cloudcontrollerconfig.CompletedConfig) cloudprovider.Interface {
-		cloud, err := ccm.InitCloudProvider(version.Program, config.ComponentConfig.KubeCloudShared.CloudProvider.CloudConfigFile)
+		cloud, err := cloudprovider.InitCloudProvider(version.Program, config.ComponentConfig.KubeCloudShared.CloudProvider.CloudConfigFile)
 		if err != nil {
 			logrus.Fatalf("Cloud provider could not be initialized: %v", err)
 		}
@@ -225,7 +223,12 @@ func (*Embedded) CloudControllerManager(ctx context.Context, ccmRBACReady <-chan
 		return cloud
 	}
 
-	command := ccmapp.NewCloudControllerManagerCommand(ccmOptions, cloudInitializer, ccmapp.DefaultInitFuncConstructors, cliflag.NamedFlagSets{}, ctx.Done())
+	command := ccmapp.NewCloudControllerManagerCommand(
+		ccmOptions,
+		cloudInitializer,
+		ccmapp.DefaultInitFuncConstructors,
+		cliflag.NamedFlagSets{},
+		ctx.Done())
 	command.SetArgs(args)
 
 	go func() {
@@ -261,7 +264,7 @@ func (e *Embedded) Docker(ctx context.Context, cfg *daemonconfig.Node) error {
 // waitForUntaintedNode watches nodes, waiting to find one not tainted as
 // uninitialized by the external cloud provider.
 func waitForUntaintedNode(ctx context.Context, kubeConfig string) error {
-	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
+	restConfig, err := util.GetRESTConfig(kubeConfig)
 	if err != nil {
 		return err
 	}

@@ -21,7 +21,7 @@ import (
 	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/kubeapiserver/authorizer/modes"
-	proxyutil "k8s.io/kubernetes/pkg/proxy/util"
+	node "k8s.io/kubernetes/pkg/proxy/util"
 
 	// for client metric registration
 	_ "k8s.io/component-base/metrics/prometheus/restclient"
@@ -40,7 +40,7 @@ func Server(ctx context.Context, cfg *config.Control) error {
 	}
 	cfg.Runtime.Tunnel = tunnel
 
-	proxyutil.DisableProxyHostnameCheck = true
+	node.DisableProxyHostnameCheck = true
 
 	authArgs := []string{
 		"--basic-auth-file=" + cfg.Runtime.PasswdFile,
@@ -138,6 +138,7 @@ func scheduler(ctx context.Context, cfg *config.Control) error {
 	if cfg.NoLeaderElect {
 		argsMap["leader-elect"] = "false"
 	}
+
 	args := config.GetArgs(argsMap, cfg.ExtraSchedulerAPIArgs)
 
 	logrus.Infof("Running kube-scheduler %s", config.ArgString(args))
@@ -200,6 +201,7 @@ func apiServer(ctx context.Context, cfg *config.Control) error {
 	argsMap["profiling"] = "false"
 	if cfg.EncryptSecrets {
 		argsMap["encryption-provider-config"] = runtime.EncryptionConfig
+		argsMap["encryption-provider-config-automatic-reload"] = "true"
 	}
 	args := config.GetArgs(argsMap, cfg.ExtraAPIArgs)
 
@@ -247,7 +249,6 @@ func prepare(ctx context.Context, config *config.Control) error {
 	deps.CreateRuntimeCertFiles(config)
 
 	cluster := cluster.New(config)
-
 	if err := cluster.Bootstrap(ctx, config.ClusterReset); err != nil {
 		return err
 	}
