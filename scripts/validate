@@ -4,9 +4,11 @@ set -e
 cd $(dirname $0)/..
 
 echo Running: go mod tidy
-go mod tidy
+go mod tidy -v
+git diff go.mod | grep "^[+-]" || pwd
 
 echo Running: go generate
+mkdir -p build/{data,static}
 GOOS=linux CC=gcc CXX=g++ go generate
 
 if [ -n "$SKIP_VALIDATE" ]; then
