@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -19,20 +20,22 @@ import (
 	"github.com/k3s-io/k3s/pkg/agent/proxy"
 	"github.com/k3s-io/k3s/pkg/agent/syssetup"
 	"github.com/k3s-io/k3s/pkg/agent/tunnel"
+	"github.com/k3s-io/k3s/pkg/certmonitor"
 	"github.com/k3s-io/k3s/pkg/cgroups"
 	"github.com/k3s-io/k3s/pkg/cli/cmds"
 	"github.com/k3s-io/k3s/pkg/clientaccess"
 	cp "github.com/k3s-io/k3s/pkg/cloudprovider"
 	"github.com/k3s-io/k3s/pkg/daemons/agent"
 	daemonconfig "github.com/k3s-io/k3s/pkg/daemons/config"
-	types "github.com/k3s-io/k3s/pkg/daemons/config"
 	"github.com/k3s-io/k3s/pkg/daemons/executor"
+	"github.com/k3s-io/k3s/pkg/metrics"
 	"github.com/k3s-io/k3s/pkg/nodeconfig"
+	"github.com/k3s-io/k3s/pkg/profile"
 	"github.com/k3s-io/k3s/pkg/rootless"
 	"github.com/k3s-io/k3s/pkg/spegel"
 	"github.com/k3s-io/k3s/pkg/util"
 	"github.com/k3s-io/k3s/pkg/version"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -45,6 +48,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	toolswatch "k8s.io/client-go/tools/watch"
 	"k8s.io/component-base/cli/globalflag"
+	"k8s.io/component-base/logs"
 	app2 "k8s.io/kubernetes/cmd/kube-proxy/app"
 	kubeproxyconfig "k8s.io/kubernetes/pkg/proxy/apis/config"
 	utilsnet "k8s.io/utils/net"
@@ -54,20 +58,20 @@ import (
 func run(ctx context.Context, cfg cmds.Agent, proxy proxy.Proxy) error {
 	nodeConfig, err := config.Get(ctx, cfg, proxy)
 	if err != nil {
-		return errors.Wrap(err, "failed to retrieve agent configuration")
+		return pkgerrors.WithMessage(err, "failed to retrieve agent configuration")
 	}
 
 	dualCluster, err := utilsnet.IsDualStackCIDRs(nodeConfig.AgentConfig.ClusterCIDRs)
 	if err != nil {
-		return errors.Wrap(err, "failed to validate cluster-cidr")
+		return pkgerrors.WithMessage(err, "failed to validate cluster-cidr")
 	}
 	dualService, err := utilsnet.IsDualStackCIDRs(nodeConfig.AgentConfig.ServiceCIDRs)
 	if err != nil {
-		return errors.Wrap(err, "failed to validate service-cidr")
+		return pkgerrors.WithMessage(err, "failed to validate service-cidr")
 	}
 	dualNode, err := utilsnet.IsDualStackIPs(nodeConfig.AgentConfig.NodeIPs)
 	if err != nil {
-		return errors.Wrap(err, "failed to validate node-ip")
+		return pkgerrors.WithMessage(err, "failed to validate node-ip")
 	}
 	serviceIPv4 := utilsnet.IsIPv4CIDR(nodeConfig.AgentConfig.ServiceCIDR)
 	clusterIPv4 := utilsnet.IsIPv4CIDR(nodeConfig.AgentConfig.ClusterCIDR)
@@ -96,7 +100,7 @@ func run(ctx context.Context, cfg cmds.Agent, proxy proxy.Proxy) error {
 
 	conntrackConfig, err := getConntrackConfig(nodeConfig)
 	if err != nil {
-		return errors.Wrap(err, "failed to validate kube-proxy conntrack configuration")
+		return pkgerrors.WithMessage(err, "failed to validate kube-proxy conntrack configuration")
 	}
 	syssetup.Configure(enableIPv6, conntrackConfig)
 	nodeConfig.AgentConfig.EnableIPv4 = enableIPv4
@@ -108,7 +112,19 @@ func run(ctx context.Context, cfg cmds.Agent, proxy proxy.Proxy) error {
 		}
 
 		if err := spegel.DefaultRegistry.Start(ctx, nodeConfig); err != nil {
-			return errors.Wrap(err, "failed to start embedded registry")
+			return pkgerrors.WithMessage(err, "failed to start embedded registry")
+		}
+	}
+
+	if nodeConfig.SupervisorMetrics {
+		if err := metrics.DefaultMetrics.Start(ctx, nodeConfig); err != nil {
+			return pkgerrors.WithMessage(err, "failed to serve metrics")
+		}
+	}
+
+	if nodeConfig.EnablePProf {
+		if err := profile.DefaultProfiler.Start(ctx, nodeConfig); err != nil {
+			return pkgerrors.WithMessage(err, "failed to serve pprof")
 		}
 	}
 
@@ -123,7 +139,7 @@ func run(ctx context.Context, cfg cmds.Agent, proxy proxy.Proxy) error {
 	if !nodeConfig.NoFlannel {
 		if (nodeConfig.FlannelExternalIP) && (len(nodeConfig.AgentConfig.NodeExternalIPs) == 0) {
 			logrus.Warnf("Server has flannel-external-ip flag set but this node does not set node-external-ip. Flannel will use internal address when connecting to this node.")
-		} else if (nodeConfig.FlannelExternalIP) && (nodeConfig.FlannelBackend != types.FlannelBackendWireguardNative) && (nodeConfig.FlannelBackend != types.FlannelBackendIPSEC) {
+		} else if (nodeConfig.FlannelExternalIP) && (nodeConfig.FlannelBackend != daemonconfig.FlannelBackendWireguardNative) {
 			logrus.Warnf("Flannel is using external addresses with an insecure backend: %v. Please consider using an encrypting flannel backend.", nodeConfig.FlannelBackend)
 		}
 		if err := flannel.Prepare(ctx, nodeConfig); err != nil {
@@ -159,20 +175,21 @@ func run(ctx context.Context, cfg cmds.Agent, proxy proxy.Proxy) error {
 	}
 
 	if err := util.WaitForAPIServerReady(ctx, nodeConfig.AgentConfig.KubeConfigKubelet, util.DefaultAPIServerReadyTimeout); err != nil {
-		return errors.Wrap(err, "failed to wait for apiserver ready")
+		return pkgerrors.WithMessage(err, "failed to wait for apiserver ready")
 	}
 
-	coreClient, err := util.GetClientSet(nodeConfig.AgentConfig.KubeConfigKubelet)
+	// Use the kubelet kubeconfig to update annotations on the local node
+	kubeletClient, err := util.GetClientSet(nodeConfig.AgentConfig.KubeConfigKubelet)
 	if err != nil {
 		return err
 	}
 
-	if err := configureNode(ctx, nodeConfig, coreClient.CoreV1().Nodes()); err != nil {
+	if err := configureNode(ctx, nodeConfig, kubeletClient.CoreV1().Nodes()); err != nil {
 		return err
 	}
 
 	if !nodeConfig.NoFlannel {
-		if err := flannel.Run(ctx, nodeConfig, coreClient.CoreV1().Nodes()); err != nil {
+		if err := flannel.Run(ctx, nodeConfig); err != nil {
 			return err
 		}
 	}
@@ -212,7 +229,7 @@ func getConntrackConfig(nodeConfig *daemonconfig.Node) (*kubeproxyconfig.KubePro
 	}
 
 	cmd := app2.NewProxyCommand()
-	globalflag.AddGlobalFlags(cmd.Flags(), cmd.Name())
+	globalflag.AddGlobalFlags(cmd.Flags(), cmd.Name(), logs.SkipLoggingConfigurationFlags())
 	if err := cmd.ParseFlags(daemonconfig.GetArgs(map[string]string{}, nodeConfig.AgentConfig.ExtraKubeProxyArgs)); err != nil {
 		return nil, err
 	}
@@ -251,7 +268,7 @@ func RunStandalone(ctx context.Context, cfg cmds.Agent) error {
 
 	nodeConfig, err := config.Get(ctx, cfg, proxy)
 	if err != nil {
-		return errors.Wrap(err, "failed to retrieve agent configuration")
+		return pkgerrors.WithMessage(err, "failed to retrieve agent configuration")
 	}
 
 	if err := executor.Bootstrap(ctx, nodeConfig, cfg); err != nil {
@@ -264,6 +281,21 @@ func RunStandalone(ctx context.Context, cfg cmds.Agent) error {
 
 	if err := tunnelSetup(ctx, nodeConfig, cfg, proxy); err != nil {
 		return err
+	}
+	if err := certMonitorSetup(ctx, nodeConfig, cfg); err != nil {
+		return err
+	}
+
+	if nodeConfig.SupervisorMetrics {
+		if err := metrics.DefaultMetrics.Start(ctx, nodeConfig); err != nil {
+			return pkgerrors.WithMessage(err, "failed to serve metrics")
+		}
+	}
+
+	if nodeConfig.EnablePProf {
+		if err := profile.DefaultProfiler.Start(ctx, nodeConfig); err != nil {
+			return pkgerrors.WithMessage(err, "failed to serve pprof")
+		}
 	}
 
 	<-ctx.Done()
@@ -279,7 +311,7 @@ func Run(ctx context.Context, cfg cmds.Agent) error {
 	}
 
 	if cfg.Rootless && !cfg.RootlessAlreadyUnshared {
-		dualNode, err := utilsnet.IsDualStackIPStrings(cfg.NodeIP)
+		dualNode, err := utilsnet.IsDualStackIPStrings(cfg.NodeIP.Value())
 		if err != nil {
 			return err
 		}
@@ -304,7 +336,7 @@ func createProxyAndValidateToken(ctx context.Context, cfg *cmds.Agent) (proxy.Pr
 	if err := os.MkdirAll(agentDir, 0700); err != nil {
 		return nil, err
 	}
-	isIPv6 := utilsnet.IsIPv6(net.ParseIP([]string{cfg.NodeIP.String()}[0]))
+	isIPv6 := utilsnet.IsIPv6(net.ParseIP(util.GetFirstValidIPString(cfg.NodeIP.Value())))
 
 	proxy, err := proxy.NewSupervisorProxy(ctx, !cfg.DisableLoadBalancer, agentDir, cfg.ServerURL, cfg.LBServerPort, isIPv6)
 	if err != nil {
@@ -398,7 +430,7 @@ func configureNode(ctx context.Context, nodeConfig *daemonconfig.Node, nodes typ
 	}
 
 	if _, err := toolswatch.UntilWithSync(ctx, lw, &v1.Node{}, nil, condition); err != nil {
-		return errors.Wrap(err, "failed to configure node")
+		return pkgerrors.WithMessage(err, "failed to configure node")
 	}
 	return nil
 }
@@ -461,6 +493,17 @@ func updateAddressAnnotations(nodeConfig *daemonconfig.Node, nodeAnnotations map
 		}
 	}
 
+	if len(agentConfig.NodeInternalDNSs) > 0 {
+		result[cp.InternalDNSKey] = strings.Join(agentConfig.NodeInternalDNSs, ",")
+	} else {
+		delete(result, cp.InternalDNSKey)
+	}
+	if len(agentConfig.NodeExternalDNSs) > 0 {
+		result[cp.ExternalDNSKey] = strings.Join(agentConfig.NodeExternalDNSs, ",")
+	} else {
+		delete(result, cp.ExternalDNSKey)
+	}
+
 	result = labels.Merge(nodeAnnotations, result)
 	return result, !equality.Semantic.DeepEqual(nodeAnnotations, result)
 }
@@ -501,6 +544,10 @@ func setupTunnelAndRunAgent(ctx context.Context, nodeConfig *daemonconfig.Node, 
 	if err := tunnelSetup(ctx, nodeConfig, cfg, proxy); err != nil {
 		return err
 	}
+	if err := certMonitorSetup(ctx, nodeConfig, cfg); err != nil {
+		return err
+	}
+
 	if !agentRan {
 		return agent.Agent(ctx, nodeConfig, proxy)
 	}
@@ -508,19 +555,30 @@ func setupTunnelAndRunAgent(ctx context.Context, nodeConfig *daemonconfig.Node, 
 }
 
 func waitForAPIServerAddresses(ctx context.Context, nodeConfig *daemonconfig.Node, cfg cmds.Agent, proxy proxy.Proxy) error {
+	var localSupervisorDefault bool
+	if addresses := proxy.SupervisorAddresses(); len(addresses) > 0 {
+		host, _, _ := net.SplitHostPort(addresses[0])
+		if host == "127.0.0.1" || host == "::1" {
+			localSupervisorDefault = true
+		}
+	}
+
 	for {
 		select {
 		case <-time.After(5 * time.Second):
-			logrus.Info("Waiting for apiserver addresses")
+			logrus.Info("Waiting for control-plane node to register apiserver addresses in etcd")
 		case addresses := <-cfg.APIAddressCh:
 			for i, a := range addresses {
 				host, _, err := net.SplitHostPort(a)
 				if err == nil {
 					addresses[i] = net.JoinHostPort(host, strconv.Itoa(nodeConfig.ServerHTTPSPort))
-					if i == 0 {
-						proxy.SetSupervisorDefault(addresses[i])
-					}
 				}
+			}
+			// If this is an etcd-only node that started up using its local supervisor,
+			// switch to using a control-plane node as the supervisor. Otherwise, leave the
+			// configured server address as the default.
+			if localSupervisorDefault && len(addresses) > 0 {
+				proxy.SetSupervisorDefault(addresses[0])
 			}
 			proxy.Update(addresses)
 			return nil
@@ -538,6 +596,13 @@ func tunnelSetup(ctx context.Context, nodeConfig *daemonconfig.Node, cfg cmds.Ag
 		return nil
 	}
 	return tunnel.Setup(ctx, nodeConfig, proxy)
+}
+
+func certMonitorSetup(ctx context.Context, nodeConfig *daemonconfig.Node, cfg cmds.Agent) error {
+	if cfg.ClusterReset {
+		return nil
+	}
+	return certmonitor.Setup(ctx, nodeConfig, cfg.DataDir)
 }
 
 // getHostname returns the actual system hostname.

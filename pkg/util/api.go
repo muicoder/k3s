@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/rancher/wrangler/pkg/merr"
 	"github.com/rancher/wrangler/pkg/schemes"
 	"github.com/sirupsen/logrus"
@@ -23,7 +24,6 @@ import (
 	authorizationv1client "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	coregetter "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/record"
 )
 
@@ -58,7 +58,7 @@ func GetAddresses(endpoint *v1.Endpoints) []string {
 // readyz endpoint instead of the deprecated healthz endpoint, and supports context.
 func WaitForAPIServerReady(ctx context.Context, kubeconfigPath string, timeout time.Duration) error {
 	var lastErr error
-	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	restConfig, err := GetRESTConfig(kubeconfigPath)
 	if err != nil {
 		return err
 	}
@@ -80,11 +80,11 @@ func WaitForAPIServerReady(ctx context.Context, kubeconfigPath string, timeout t
 		return err
 	}
 
-	err = wait.PollImmediateWithContext(ctx, time.Second, timeout, func(ctx context.Context) (bool, error) {
+	err = wait.PollImmediateWithContext(ctx, time.Second*2, timeout, func(ctx context.Context) (bool, error) {
 		healthStatus := 0
 		result := restClient.Get().AbsPath("/readyz").Do(ctx).StatusCode(&healthStatus)
 		if rerr := result.Error(); rerr != nil {
-			lastErr = errors.Wrap(rerr, "failed to get apiserver /readyz status")
+			lastErr = pkgerrors.WithMessage(rerr, "failed to get apiserver /readyz status")
 			return false, nil
 		}
 		if healthStatus != http.StatusOK {
@@ -112,7 +112,7 @@ type genericAccessReviewRequest func(context.Context) (*authorizationv1.SubjectA
 // the access would be allowed.
 func WaitForRBACReady(ctx context.Context, kubeconfigPath string, timeout time.Duration, ra authorizationv1.ResourceAttributes, user string, groups ...string) error {
 	var lastErr error
-	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	restConfig, err := GetRESTConfig(kubeconfigPath)
 	if err != nil {
 		return err
 	}
@@ -146,6 +146,34 @@ func WaitForRBACReady(ctx context.Context, kubeconfigPath string, timeout time.D
 	}
 
 	return nil
+}
+
+// CheckRBAC performs a single SelfSubjectAccessReview or SubjectAccessReview, returning a
+// boolean indicating whether or not the requested access would be allowed. This is basically
+// `kubectl auth can-i`.
+func CheckRBAC(ctx context.Context, kubeconfigPath string, ra authorizationv1.ResourceAttributes, user string, groups ...string) (bool, error) {
+	restConfig, err := GetRESTConfig(kubeconfigPath)
+	if err != nil {
+		return false, err
+	}
+	authClient, err := authorizationv1client.NewForConfig(restConfig)
+	if err != nil {
+		return false, err
+	}
+
+	var reviewFunc genericAccessReviewRequest
+	if len(user) == 0 && len(groups) == 0 {
+		reviewFunc = selfSubjectAccessReview(authClient, ra)
+	} else {
+		reviewFunc = subjectAccessReview(authClient, ra, user, groups)
+	}
+
+	status, err := reviewFunc(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return status.Allowed, nil
 }
 
 // selfSubjectAccessReview returns a function that makes SelfSubjectAccessReview requests using the
