@@ -1,25 +1,5 @@
 name: Unit Test Coverage
 on:
-  push:
-    paths-ignore:
-      - "**.md"
-      - "channel.yaml"
-      - "install.sh"
-      - "tests/snapshotter/**"
-      - "tests/install/**"
-      - "tests/cgroup/**"
-      - ".github/**"
-      - "!.github/workflows/unitcoverage.yaml"
-  pull_request:
-    paths-ignore:
-      - "**.md"
-      - "channel.yaml"
-      - "install.sh"
-      - "tests/snapshotter/**"
-      - "tests/install/**"
-      - "tests/cgroup/**"
-      - ".github/**"
-      - "!.github/workflows/unitcoverage.yaml"
   workflow_dispatch: {}
 
 permissions:

@@ -1,24 +1,5 @@
 name: Integration Test Coverage
 on: 
-  push:
-    paths-ignore:
-      - "**.md"
-      - "channel.yaml"
-      - "install.sh"
-      - "tests/**"
-      - "!tests/integration**"
-      - ".github/**"
-      - "!.github/workflows/integration.yaml"
-  pull_request:
-    paths-ignore:
-      - "**.md"
-      - "channel.yaml"
-      - "install.sh"
-      - "tests/**"
-      - "!tests/integration**"
-      - ".github/**"
-      - "!.github/workflows/integration.yaml"
-      - "!.github/workflows/build-k3s.yaml"
   workflow_dispatch: {}
 
 permissions:

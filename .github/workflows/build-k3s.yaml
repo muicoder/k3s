@@ -1,6 +1,7 @@
 name: Build K3s
 
 on: 
+  workflow_dispatch:
   workflow_call:
    inputs:
     upload-repo:
