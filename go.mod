@@ -7,7 +7,8 @@ replace (
 	github.com/Mirantis/cri-dockerd => github.com/muicoder/cri-dockerd v0.3.15-k3s1.26.15 // release-0.3
 	github.com/cloudnativelabs/kube-router/v2 => github.com/k3s-io/kube-router/v2 v2.1.2
 	github.com/containerd/containerd => github.com/muicoder/containerd v1.7.23-k3s1.26.15 // release-1.7
-	github.com/docker/distribution => github.com/docker/distribution v2.8.2+incompatible
+	github.com/distribution/reference => github.com/distribution/reference v0.0.0-20230831112756-2566ed438c1f // reference.go:SplitHostname
+	github.com/docker/distribution => github.com/docker/distribution v2.8.2+incompatible // reference.go:SplitHostname
 	github.com/docker/docker => github.com/docker/docker v24.0.9+incompatible
 	github.com/emicklei/go-restful/v3 => github.com/emicklei/go-restful/v3 v3.9.0
 	github.com/golang/protobuf => github.com/golang/protobuf v1.5.4
@@ -16,8 +17,6 @@ replace (
 	github.com/kubernetes-sigs/cri-tools => github.com/k3s-io/cri-tools v1.26.0-rc.0-k3s1
 	github.com/open-policy-agent/opa => github.com/open-policy-agent/opa v0.59.0 // github.com/Microsoft/hcsshim using bad version v0.42.2
 	github.com/opencontainers/runc => github.com/muicoder/runc v1.1.15-k3s1.26.15 // release-1.1
-	github.com/prometheus/client_golang => github.com/prometheus/client_golang v1.18.0
-	github.com/prometheus/common => github.com/prometheus/common v0.45.0
 	github.com/quic-go/qtls-go1-20 => github.com/quic-go/qtls-go1-20 v0.3.3
 	github.com/quic-go/quic-go => github.com/quic-go/quic-go v0.38.2
 	github.com/rancher/dynamiclistener => github.com/muicoder/dynamiclistener v0.3.6
@@ -86,14 +85,15 @@ replace (
 )
 
 require (
+	dario.cat/mergo v1.0.0
 	github.com/Microsoft/hcsshim v0.11.4
 	github.com/Mirantis/cri-dockerd v0.0.0-00010101000000-000000000000
 	github.com/cloudnativelabs/kube-router/v2 v2.0.0-00010101000000-000000000000
 	github.com/containerd/aufs v1.0.0
-	github.com/containerd/cgroups/v3 v3.0.2
+	github.com/containerd/cgroups/v3 v3.0.3
 	github.com/containerd/containerd v1.7.23
-	github.com/containerd/fuse-overlayfs-snapshotter v1.0.5
-	github.com/containerd/stargz-snapshotter v0.14.4-0.20230913082252-7275d45b185c
+	github.com/containerd/fuse-overlayfs-snapshotter v1.0.8
+	github.com/containerd/stargz-snapshotter v0.15.1
 	github.com/containerd/zfs v1.1.0
 	github.com/coreos/go-iptables v0.7.0
 	github.com/coreos/go-systemd/v22 v22.5.0
@@ -110,6 +110,7 @@ require (
 	github.com/google/uuid v1.4.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.0
+	github.com/inetaf/tcpproxy v0.0.0-20240214030015-3ce58045626c
 	github.com/ipfs/go-ds-leveldb v0.5.0
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/joho/godotenv v1.5.1
@@ -131,7 +132,7 @@ require (
 	github.com/otiai10/copy v1.7.0
 	github.com/pkg/errors v0.9.1
 	github.com/rancher/dynamiclistener v0.3.6
-	github.com/rancher/lasso v0.0.0-20230830164424-d684fdeb6f29
+	github.com/rancher/lasso v0.0.0-20240424164928-e175b1e7b719
 	github.com/rancher/permissions v0.0.0-20240523180510-4001d3d637f7
 	github.com/rancher/remotedialer v0.4.1
 	github.com/rancher/wharfie v0.6.4
@@ -157,7 +158,6 @@ require (
 	golang.org/x/sys v0.16.0
 	google.golang.org/grpc v1.60.1
 	gopkg.in/yaml.v2 v2.4.0
-	inet.af/tcpproxy v0.0.0-20200125044825-b6bb9b5b8252
 	k8s.io/api v0.29.9
 	k8s.io/apimachinery v0.29.9
 	k8s.io/apiserver v0.27.16
@@ -416,9 +416,9 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/polydawn/refmt v0.89.0 // indirect
 	github.com/pquerna/cachecontrol v0.1.0 // indirect
-	github.com/prometheus/client_golang v1.19.0 // indirect
+	github.com/prometheus/client_golang v1.20.5 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
-	github.com/prometheus/common v0.48.0 // indirect
+	github.com/prometheus/common v0.60.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/quic-go/qtls-go1-20 v0.3.3 // indirect
