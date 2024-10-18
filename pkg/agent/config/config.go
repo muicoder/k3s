@@ -59,6 +59,8 @@ func Get(ctx context.Context, agent cmds.Agent, proxy proxy.Proxy) (*config.Node
 	// does not support jittering, so we instead use wait.JitterUntilWithContext, and cancel
 	// the context on success.
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	wait.JitterUntilWithContext(ctx, func(ctx context.Context) {
 		agentConfig, err = get(ctx, &agent, proxy)
 		if err != nil {
