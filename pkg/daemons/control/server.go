@@ -14,6 +14,7 @@ import (
 	"github.com/k3s-io/k3s/pkg/daemons/config"
 	"github.com/k3s-io/k3s/pkg/daemons/control/deps"
 	"github.com/k3s-io/k3s/pkg/daemons/executor"
+	"github.com/k3s-io/k3s/pkg/secretsencrypt"
 	"github.com/k3s-io/k3s/pkg/util"
 	"github.com/k3s-io/k3s/pkg/version"
 	"github.com/pkg/errors"
@@ -57,6 +58,19 @@ func Server(ctx context.Context, cfg *config.Control) error {
 
 		if err := apiServer(ctx, cfg); err != nil {
 			return err
+		}
+		if cfg.EncryptSecrets {
+			controllerName := "reencrypt-secrets"
+			cfg.Runtime.ClusterControllerStarts[controllerName] = func(ctx context.Context) {
+				// cfg.Runtime.Core is populated before this callback is triggered
+				if err := secretsencrypt.Register(ctx,
+					controllerName,
+					cfg,
+					cfg.Runtime.Core.Core().V1().Node(),
+					cfg.Runtime.Core.Core().V1().Secret()); err != nil {
+					logrus.Errorf("Failed to register %s controller: %v", controllerName, err)
+				}
+			}
 		}
 	}
 
@@ -200,6 +214,7 @@ func apiServer(ctx context.Context, cfg *config.Control) error {
 	argsMap["profiling"] = "false"
 	if cfg.EncryptSecrets {
 		argsMap["encryption-provider-config"] = runtime.EncryptionConfig
+		argsMap["encryption-provider-config-automatic-reload"] = "true"
 	}
 	args := config.GetArgs(argsMap, cfg.ExtraAPIArgs)
 

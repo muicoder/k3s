@@ -191,7 +191,7 @@ var ServerFlags = []cli.Flag{
 	},
 	&cli.StringFlag{
 		Name:        "advertise-address",
-		Usage:       "(listener) IPv4 address that apiserver uses to advertise to members of the cluster (default: node-external-ip/node-ip)",
+		Usage:       "(listener) IPv4/IPv6 address that apiserver uses to advertise to members of the cluster (default: node-external-ip/node-ip)",
 		Destination: &ServerConfig.AdvertiseIP,
 	},
 	&cli.IntFlag{
@@ -204,9 +204,9 @@ var ServerFlags = []cli.Flag{
 		Usage: "(listener) Add additional hostnames or IPv4/IPv6 addresses as Subject Alternative Names on the server TLS cert",
 		Value: &ServerConfig.TLSSan,
 	},
-	&cli.BoolFlag{
+	&cli.BoolTFlag{
 		Name:        "tls-san-security",
-		Usage:       "(listener) Protect the server TLS cert by refusing to add Subject Alternative Names not associated with the kubernetes apiserver service, server nodes, or values of the tls-san option (default: false)",
+		Usage:       "(listener) Protect the server TLS cert by refusing to add Subject Alternative Names not associated with the kubernetes apiserver service, server nodes, or values of the tls-san option (default: true)",
 		Destination: &ServerConfig.TLSSanSecurity,
 	},
 	DataDirFlag,
