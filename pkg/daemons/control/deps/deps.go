@@ -42,8 +42,7 @@ const (
 	RequestHeaderCN = "system:auth-proxy"
 )
 
-var (
-	kubeconfigTemplate = template.Must(template.New("kubeconfig").Parse(`apiVersion: v1
+var kubeconfigTemplate = template.Must(template.New("kubeconfig").Parse(`apiVersion: v1
 clusters:
 - cluster:
     server: {{.URL}}
@@ -64,7 +63,6 @@ users:
     client-certificate: {{.ClientCert}}
     client-key: {{.ClientKey}}
 `))
-)
 
 func migratePassword(p *passwd.Passwd) error {
 	server, _ := p.Pass("server")
@@ -283,9 +281,7 @@ func genEncryptedNetworkInfo(controlConfig *config.Control) error {
 }
 
 func getServerPass(passwd *passwd.Passwd, config *config.Control) (string, error) {
-	var (
-		err error
-	)
+	var err error
 
 	serverPass := config.Token
 	if serverPass == "" {
@@ -448,14 +444,16 @@ func genServerCerts(config *config.Control) error {
 }
 
 func genETCDCerts(config *config.Control) error {
-
 	runtime := config.Runtime
 	regen, err := createSigningCertKey("etcd-server", runtime.ETCDServerCA, runtime.ETCDServerCAKey)
 	if err != nil {
 		return err
 	}
 
-	altNames := &certutil.AltNames{}
+	altNames := &certutil.AltNames{
+		DNSNames: []string{"kine.sock"},
+	}
+
 	addSANs(altNames, config.SANs)
 
 	if _, err := createClientCertKey(regen, "etcd-client", nil,
@@ -742,7 +740,7 @@ func genEncryptionConfigAndState(controlConfig *config.Control) error {
 		return nil
 	}
 
-	aescbcKey := make([]byte, aescbcKeySize, aescbcKeySize)
+	aescbcKey := make([]byte, aescbcKeySize)
 	_, err := cryptorand.Read(aescbcKey)
 	if err != nil {
 		return err
@@ -779,7 +777,7 @@ func genEncryptionConfigAndState(controlConfig *config.Control) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(runtime.EncryptionConfig, b, 0600); err != nil {
+	if err := util.AtomicWrite(runtime.EncryptionConfig, b, 0600); err != nil {
 		return err
 	}
 	encryptionConfigHash := sha256.Sum256(b)
@@ -832,11 +830,12 @@ func genEgressSelectorConfig(controlConfig *config.Control) error {
 
 func genCloudConfig(controlConfig *config.Control) error {
 	cloudConfig := cloudprovider.Config{
-		LBEnabled:   !controlConfig.DisableServiceLB,
-		LBNamespace: controlConfig.ServiceLBNamespace,
-		LBImage:     cloudprovider.DefaultLBImage,
-		Rootless:    controlConfig.Rootless,
-		NodeEnabled: !controlConfig.DisableCCM,
+		LBDefaultPriorityClassName: cloudprovider.DefaultLBPriorityClassName,
+		LBEnabled:                  !controlConfig.DisableServiceLB,
+		LBNamespace:                controlConfig.ServiceLBNamespace,
+		LBImage:                    cloudprovider.DefaultLBImage,
+		Rootless:                   controlConfig.Rootless,
+		NodeEnabled:                !controlConfig.DisableCCM,
 	}
 	if controlConfig.SystemDefaultRegistry != "" {
 		cloudConfig.LBImage = controlConfig.SystemDefaultRegistry + "/" + cloudConfig.LBImage
@@ -846,5 +845,4 @@ func genCloudConfig(controlConfig *config.Control) error {
 		return err
 	}
 	return os.WriteFile(controlConfig.Runtime.CloudControllerConfig, b, 0600)
-
 }

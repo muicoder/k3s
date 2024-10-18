@@ -200,6 +200,7 @@ func apiServer(ctx context.Context, cfg *config.Control) error {
 	argsMap["profiling"] = "false"
 	if cfg.EncryptSecrets {
 		argsMap["encryption-provider-config"] = runtime.EncryptionConfig
+		argsMap["encryption-provider-config-automatic-reload"] = "true"
 	}
 	args := config.GetArgs(argsMap, cfg.ExtraAPIArgs)
 
@@ -247,7 +248,6 @@ func prepare(ctx context.Context, config *config.Control) error {
 	deps.CreateRuntimeCertFiles(config)
 
 	cluster := cluster.New(config)
-
 	if err := cluster.Bootstrap(ctx, config.ClusterReset); err != nil {
 		return err
 	}
@@ -299,6 +299,7 @@ func cloudControllerManager(ctx context.Context, cfg *config.Control) error {
 		"authentication-kubeconfig":    runtime.KubeConfigCloudController,
 		"node-status-update-frequency": "1m0s",
 		"bind-address":                 cfg.Loopback(false),
+		"feature-gates":                "CloudDualStackNodeIPs=true",
 	}
 	if cfg.NoLeaderElect {
 		argsMap["leader-elect"] = "false"

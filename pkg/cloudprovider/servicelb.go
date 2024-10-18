@@ -2,13 +2,13 @@ package cloudprovider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"sigs.k8s.io/yaml"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"encoding/json"
+	"sigs.k8s.io/yaml"
 
 	"github.com/k3s-io/k3s/pkg/util"
 	"github.com/k3s-io/k3s/pkg/version"
@@ -41,13 +41,15 @@ var (
 	daemonsetNodeLabel     = "svccontroller." + version.Program + ".cattle.io/enablelb"
 	daemonsetNodePoolLabel = "svccontroller." + version.Program + ".cattle.io/lbpool"
 	nodeSelectorLabel      = "svccontroller." + version.Program + ".cattle.io/nodeselector"
+	priorityAnnotation     = "svccontroller." + version.Program + ".cattle.io/priorityclassname"
 	tolerationsAnnotation  = "svccontroller." + version.Program + ".cattle.io/tolerations"
 	controllerName         = ccmapp.DefaultInitFuncConstructors["service"].InitContext.ClientName
 )
 
 const (
-	Ready       = condition.Cond("Ready")
-	DefaultLBNS = meta.NamespaceSystem
+	Ready                      = condition.Cond("Ready")
+	DefaultLBNS                = meta.NamespaceSystem
+	DefaultLBPriorityClassName = "system-node-critical"
 )
 
 var (
@@ -429,6 +431,7 @@ func (k *k3s) deleteDaemonSet(ctx context.Context, svc *core.Service) error {
 func (k *k3s) newDaemonSet(svc *core.Service) (*apps.DaemonSet, error) {
 	name := generateName(svc)
 	oneInt := intstr.FromInt(1)
+	priorityClassName := k.getPriorityClassName(svc)
 	localTraffic := servicehelper.RequestsOnlyLocalTraffic(svc)
 	sourceRangesSet, err := servicehelper.GetLoadBalancerSourceRanges(svc)
 	if err != nil {
@@ -480,6 +483,7 @@ func (k *k3s) newDaemonSet(svc *core.Service) (*apps.DaemonSet, error) {
 					},
 				},
 				Spec: core.PodSpec{
+					PriorityClassName:            priorityClassName,
 					ServiceAccountName:           "svclb",
 					AutomountServiceAccountToken: utilsptr.To(false),
 					SecurityContext:              securityContext,
@@ -691,6 +695,17 @@ func (k *k3s) removeFinalizer(ctx context.Context, svc *core.Service) (*core.Ser
 		return k.client.CoreV1().Services(svc.Namespace).Update(ctx, svc, meta.UpdateOptions{})
 	}
 	return svc, nil
+}
+
+// getPriorityClassName returns the value of the priority class name annotation on the service,
+// or the system default priority class name.
+func (k *k3s) getPriorityClassName(svc *core.Service) string {
+	if svc != nil {
+		if v, ok := svc.Annotations[priorityAnnotation]; ok {
+			return v
+		}
+	}
+	return k.LBDefaultPriorityClassName
 }
 
 // getTolerations retrieves the tolerations from a service's annotations. 

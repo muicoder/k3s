@@ -64,7 +64,6 @@ func main() {
 			etcdsnapshotCommand,
 			etcdsnapshotCommand,
 			etcdsnapshotCommand,
-			etcdsnapshotCommand,
 		),
 		cmds.NewSecretsEncryptCommands(
 			secretsencryptCommand,
@@ -73,8 +72,10 @@ func main() {
 			secretsencryptCommand,
 			secretsencryptCommand,
 			secretsencryptCommand,
+			secretsencryptCommand,
 		),
 		cmds.NewCertCommands(
+			certCommand,
 			certCommand,
 			certCommand,
 		),
