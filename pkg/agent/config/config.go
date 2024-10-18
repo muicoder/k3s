@@ -539,7 +539,6 @@ func get(ctx context.Context, envInfo *cmds.Agent, proxy proxy.Proxy) (*config.N
 		SELinux:                  envInfo.EnableSELinux,
 		ContainerRuntimeEndpoint: envInfo.ContainerRuntimeEndpoint,
 		ImageServiceEndpoint:     envInfo.ImageServiceEndpoint,
-		MultiClusterCIDR:         controlConfig.MultiClusterCIDR,
 		EnablePProf:              envInfo.EnablePProf,
 		EmbeddedRegistry:         controlConfig.EmbeddedRegistry,
 		FlannelBackend:           controlConfig.FlannelBackend,

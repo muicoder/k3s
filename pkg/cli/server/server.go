@@ -37,10 +37,6 @@ import (
 	kubeapiserverflag "k8s.io/component-base/cli/flag"
 	"k8s.io/kubernetes/pkg/controlplane"
 	utilsnet "k8s.io/utils/net"
-
-	_ "github.com/go-sql-driver/mysql" // ensure we have mysql
-	_ "github.com/lib/pq"              // ensure we have postgres
-	_ "github.com/mattn/go-sqlite3"    // ensure we have sqlite
 )
 
 func Run(app *cli.Context) error {
@@ -158,7 +154,6 @@ func run(app *cli.Context, cfg *cmds.Server, leaderControllers server.CustomCont
 	serverConfig.ControlConfig.KineTLS = cfg.KineTLS
 	serverConfig.ControlConfig.AdvertiseIP = cfg.AdvertiseIP
 	serverConfig.ControlConfig.AdvertisePort = cfg.AdvertisePort
-	serverConfig.ControlConfig.MultiClusterCIDR = cfg.MultiClusterCIDR
 	serverConfig.ControlConfig.FlannelBackend = cfg.FlannelBackend
 	serverConfig.ControlConfig.FlannelIPv6Masq = cfg.FlannelIPv6Masq
 	serverConfig.ControlConfig.FlannelExternalIP = cfg.FlannelExternalIP
@@ -204,10 +199,6 @@ func run(app *cli.Context, cfg *cmds.Server, leaderControllers server.CustomCont
 		}
 	} else {
 		logrus.Info("ETCD snapshots are disabled")
-	}
-
-	if cfg.MultiClusterCIDR {
-		logrus.Warn("multiClusterCIDR alpha feature is non-functional")
 	}
 
 	if cfg.ClusterResetRestorePath != "" && !cfg.ClusterReset {
@@ -509,6 +500,8 @@ func run(app *cli.Context, cfg *cmds.Server, leaderControllers server.CustomCont
 	if err := server.StartServer(ctx, &serverConfig, cfg); err != nil {
 		return err
 	}
+
+	go cmds.WriteCoverage(ctx)
 
 	go func() {
 		if !serverConfig.ControlConfig.DisableAPIServer {

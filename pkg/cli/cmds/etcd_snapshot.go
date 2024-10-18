@@ -126,14 +126,20 @@ var EtcdSnapshotFlags = []cli.Flag{
 	},
 }
 
-func NewEtcdSnapshotCommands(run, delete, list, prune, save func(ctx *cli.Context) error) cli.Command {
+func NewEtcdSnapshotCommands(delete, list, prune, save func(ctx *cli.Context) error) cli.Command {
 	return cli.Command{
 		Name:            EtcdSnapshotCommand,
-		Usage:           "Trigger an immediate etcd snapshot",
 		SkipFlagParsing: false,
 		SkipArgReorder:  true,
-		Action:          run,
 		Subcommands: []cli.Command{
+			{
+				Name:            "save",
+				Usage:           "Trigger an immediate etcd snapshot",
+				SkipFlagParsing: false,
+				SkipArgReorder:  true,
+				Action:          save,
+				Flags:           EtcdSnapshotFlags,
+			},
 			{
 				Name:            "delete",
 				Usage:           "Delete given snapshot(s)",
@@ -161,14 +167,6 @@ func NewEtcdSnapshotCommands(run, delete, list, prune, save func(ctx *cli.Contex
 				SkipFlagParsing: false,
 				SkipArgReorder:  true,
 				Action:          prune,
-				Flags:           EtcdSnapshotFlags,
-			},
-			{
-				Name:            "save",
-				Usage:           "Trigger an immediate etcd snapshot",
-				SkipFlagParsing: false,
-				SkipArgReorder:  true,
-				Action:          save,
 				Flags:           EtcdSnapshotFlags,
 			},
 		},

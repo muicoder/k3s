@@ -90,16 +90,17 @@ func Run(ctx *cli.Context) error {
 
 	contextCtx := signals.SetupSignalContext()
 
-	if cmds.AgentConfig.VPNAuthFile != "" {
-		cmds.AgentConfig.VPNAuth, err = util.ReadFile(cmds.AgentConfig.VPNAuthFile)
+	go cmds.WriteCoverage(contextCtx)
+	if cfg.VPNAuthFile != "" {
+		cfg.VPNAuth, err = util.ReadFile(cfg.VPNAuthFile)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Starts the VPN in the agent if config was set up
-	if cmds.AgentConfig.VPNAuth != "" {
-		err := vpn.StartVPN(cmds.AgentConfig.VPNAuth)
+	if cfg.VPNAuth != "" {
+		err := vpn.StartVPN(cfg.VPNAuth)
 		if err != nil {
 			return err
 		}

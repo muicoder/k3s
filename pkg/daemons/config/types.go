@@ -25,8 +25,6 @@ const (
 	FlannelBackendNone            = "none"
 	FlannelBackendVXLAN           = "vxlan"
 	FlannelBackendHostGW          = "host-gw"
-	FlannelBackendIPSEC           = "ipsec"
-	FlannelBackendWireguard       = "wireguard"
 	FlannelBackendWireguardNative = "wireguard-native"
 	FlannelBackendTailscale       = "tailscale"
 	EgressSelectorModeAgent       = "agent"
@@ -43,7 +41,6 @@ type Node struct {
 	ImageServiceEndpoint     string
 	NoFlannel                bool
 	SELinux                  bool
-	MultiClusterCIDR         bool
 	EnablePProf              bool
 	SupervisorMetrics        bool
 	EmbeddedRegistry         bool
@@ -171,7 +168,6 @@ type CriticalControlArgs struct {
 	DisableNPC            bool         `cli:"disable-network-policy"`
 	DisableServiceLB      bool         `cli:"disable-service-lb"`
 	EncryptSecrets        bool         `cli:"secrets-encryption"`
-	MultiClusterCIDR      bool         `cli:"multi-cluster-cidr"`
 	EmbeddedRegistry      bool         `cli:"embedded-registry"`
 	FlannelBackend        string       `cli:"flannel-backend"`
 	FlannelIPv6Masq       bool         `cli:"flannel-ipv6-masq"`

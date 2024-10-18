@@ -57,7 +57,6 @@ func main() {
 			token.Rotate,
 		),
 		cmds.NewEtcdSnapshotCommands(
-			etcdsnapshot.Run,
 			etcdsnapshot.Delete,
 			etcdsnapshot.List,
 			etcdsnapshot.Prune,

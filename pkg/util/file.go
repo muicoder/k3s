@@ -2,8 +2,8 @@ package util
 
 import (
 	"os"
-	"path/filepath"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"

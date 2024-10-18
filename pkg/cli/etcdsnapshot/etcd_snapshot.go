@@ -95,12 +95,6 @@ func wrapServerError(err error) error {
 	return errors.Wrap(err, "see server log for details")
 }
 
-// Run was an alias for Save
-func Run(app *cli.Context) error {
-	cli.ShowAppHelp(app)
-	return fmt.Errorf("saving with etcd-snapshot was deprecated in v1.26, use \"etcd-snapshot save\" instead")
-}
-
 // Save triggers an on-demand etcd snapshot operation
 func Save(app *cli.Context) error {
 	if err := cmds.InitLogging(); err != nil {
