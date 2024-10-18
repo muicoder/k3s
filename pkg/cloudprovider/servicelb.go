@@ -2,9 +2,7 @@ package cloudprovider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"sigs.k8s.io/yaml"
 	"sort"
 	"strconv"
 	"strings"
