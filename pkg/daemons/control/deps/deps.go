@@ -627,6 +627,7 @@ func createClientCertKey(regen bool, commonName string, organization []string, a
 
 	cfg := certutil.Config{
 		CommonName:   commonName,
+		ExpiresAt:    0, // by CATTLE_NEW_SIGNED_CERT_EXPIRATION_DAYS
 		Organization: organization,
 		Usages:       extKeyUsage,
 	}
@@ -700,7 +701,7 @@ func createSigningCertKey(prefix, certFile, keyFile string) (bool, error) {
 	cfg := certutil.Config{
 		CommonName: fmt.Sprintf("%s-ca@%d", prefix, time.Now().Unix()),
 	}
-
+	// Hard-coded default value of 10 years
 	cert, err := certutil.NewSelfSignedCACert(cfg, caKey.(crypto.Signer))
 	if err != nil {
 		return false, err

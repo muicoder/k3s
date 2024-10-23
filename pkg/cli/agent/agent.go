@@ -90,7 +90,6 @@ func Run(ctx *cli.Context) error {
 
 	contextCtx := signals.SetupSignalContext()
 
-	go cmds.WriteCoverage(contextCtx)
 	if cfg.VPNAuthFile != "" {
 		cfg.VPNAuth, err = util.ReadFile(cfg.VPNAuthFile)
 		if err != nil {

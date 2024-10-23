@@ -153,10 +153,6 @@ type Agent struct {
 	DisableServiceLB        bool
 	EnableIPv4              bool
 	EnableIPv6              bool
-	VLevel                  int
-	VModule                 string
-	LogFile                 string
-	AlsoLogToStderr         bool
 }
 
 // CriticalControlArgs contains parameters that all control plane nodes in HA must share
@@ -241,8 +237,6 @@ type Control struct {
 	EtcdListFormat           string   `json:"-"`
 	EtcdS3                   *EtcdS3  `json:"-"`
 	ServerNodeName           string
-	VLevel                   int
-	VModule                  string
 
 	BindAddress string
 	SANs        []string

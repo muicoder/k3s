@@ -110,7 +110,6 @@ func kubeletArgs(cfg *config.Agent) map[string]string {
 		}
 	} else {
 		// Cluster is using the embedded CCM, we know that the feature-gate will be enabled there as well.
-		argsMap["feature-gates"] = util.AddFeatureGate(argsMap["feature-gates"], "CloudDualStackNodeIPs=true")
 		if nodeIPs := util.JoinIPs(cfg.NodeIPs); nodeIPs != "" {
 			argsMap["node-ip"] = util.JoinIPs(cfg.NodeIPs)
 		}

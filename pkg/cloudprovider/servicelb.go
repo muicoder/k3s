@@ -27,11 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/cloud-provider/names"
+	ccmapp "k8s.io/cloud-provider/app"
 	servicehelper "k8s.io/cloud-provider/service/helpers"
-	"k8s.io/kubernetes/pkg/features"
 	utilsnet "k8s.io/utils/net"
 	utilsptr "k8s.io/utils/ptr"
 )
@@ -45,7 +43,7 @@ var (
 	nodeSelectorLabel      = "svccontroller." + version.Program + ".cattle.io/nodeselector"
 	priorityAnnotation     = "svccontroller." + version.Program + ".cattle.io/priorityclassname"
 	tolerationsAnnotation  = "svccontroller." + version.Program + ".cattle.io/tolerations"
-	controllerName         = names.ServiceLBController
+	controllerName         = ccmapp.DefaultInitFuncConstructors["service"].InitContext.ClientName
 )
 
 const (
@@ -780,8 +778,5 @@ func ingressToString(ingresses []core.LoadBalancerIngress) []string {
 }
 
 func getHostIPsFieldPath() string {
-	if utilfeature.DefaultFeatureGate.Enabled(features.PodHostIPs) {
-		return "status.hostIPs"
-	}
 	return "status.hostIP"
 }

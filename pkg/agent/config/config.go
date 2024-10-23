@@ -80,7 +80,7 @@ func KubeProxyDisabled(ctx context.Context, node *config.Node, proxy proxy.Proxy
 	var disabled bool
 	var err error
 
-	_ = wait.PollUntilContextCancel(ctx, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+	wait.PollImmediateUntilWithContext(ctx, 5*time.Second, func(ctx context.Context) (bool, error) {
 		disabled, err = getKubeProxyDisabled(ctx, node, proxy)
 		if err != nil {
 			logrus.Infof("Waiting to retrieve kube-proxy configuration; server is not ready: %v", err)
@@ -98,7 +98,7 @@ func APIServers(ctx context.Context, node *config.Node, proxy proxy.Proxy) []str
 	var addresses []string
 	var err error
 
-	_ = wait.PollUntilContextCancel(ctx, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+	wait.PollImmediateUntilWithContext(ctx, 5*time.Second, func(ctx context.Context) (bool, error) {
 		addresses, err = getAPIServers(ctx, node, proxy)
 		if err != nil {
 			logrus.Infof("Failed to retrieve list of apiservers from server: %v", err)
@@ -718,10 +718,6 @@ func get(ctx context.Context, envInfo *cmds.Agent, proxy proxy.Proxy) (*config.N
 	nodeConfig.AgentConfig.PodManifests = filepath.Join(envInfo.DataDir, "agent", DefaultPodManifestPath)
 	nodeConfig.AgentConfig.ProtectKernelDefaults = envInfo.ProtectKernelDefaults
 	nodeConfig.AgentConfig.DisableServiceLB = envInfo.DisableServiceLB
-	nodeConfig.AgentConfig.VLevel = cmds.LogConfig.VLevel
-	nodeConfig.AgentConfig.VModule = cmds.LogConfig.VModule
-	nodeConfig.AgentConfig.LogFile = cmds.LogConfig.LogFile
-	nodeConfig.AgentConfig.AlsoLogToStderr = cmds.LogConfig.AlsoLogToStderr
 
 	privRegistries, err := registries.GetPrivateRegistries(envInfo.PrivateRegistry)
 	if err != nil {

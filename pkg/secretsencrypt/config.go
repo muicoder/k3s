@@ -211,7 +211,7 @@ func WaitForEncryptionConfigReload(runtime *config.ControlRuntime, reloadSuccess
 	var lastFailure string
 
 	ctx := context.Background()
-	err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+	err := wait.PollImmediateWithContext(ctx, 5*time.Second, 60*time.Second, func(ctx context.Context) (bool, error) {
 		newReloadTime, newReloadSuccess, err := GetEncryptionConfigMetrics(runtime, false)
 		if err != nil {
 			return true, err
@@ -251,7 +251,7 @@ func GetEncryptionConfigMetrics(runtime *config.ControlRuntime, initialMetrics b
 	// This is wrapped in a poller because on startup no metrics exist. Its only after the encryption config
 	// is modified and the first reload occurs that the metrics are available.
 	ctx := context.Background()
-	err = wait.PollUntilContextTimeout(ctx, 5*time.Second, 80*time.Second, true, func(ctx context.Context) (bool, error) {
+	err = wait.PollImmediateWithContext(ctx, 5*time.Second, 80*time.Second, func(ctx context.Context) (bool, error) {
 		data, err := restClient.Get().AbsPath("/metrics").DoRaw(ctx)
 		if err != nil {
 			return true, err
@@ -264,10 +264,11 @@ func GetEncryptionConfigMetrics(runtime *config.ControlRuntime, initialMetrics b
 			return true, err
 		}
 		tsMetric := mf["apiserver_encryption_config_controller_automatic_reload_last_timestamp_seconds"]
-		successMetric := mf["apiserver_encryption_config_controller_automatic_reload_success_total"]
+		// Potentially multiple metrics with different success/failure labels
+		totalMetrics := mf["apiserver_encryption_config_controller_automatic_reloads_total"]
 
 		// First time, no metrics exist, so return zeros
-		if tsMetric == nil && successMetric == nil && initialMetrics {
+		if tsMetric == nil && totalMetrics == nil && initialMetrics {
 			return true, nil
 		}
 
@@ -276,8 +277,8 @@ func GetEncryptionConfigMetrics(runtime *config.ControlRuntime, initialMetrics b
 			return false, nil
 		}
 
-		if successMetric == nil {
-			lastFailure = "encryption config success metric not found"
+		if totalMetrics == nil {
+			lastFailure = "encryption config total metric not found"
 			return false, nil
 		}
 
@@ -286,8 +287,14 @@ func GetEncryptionConfigMetrics(runtime *config.ControlRuntime, initialMetrics b
 			return true, fmt.Errorf("encryption reload time is incorrectly ahead of current time")
 		}
 
-		reloadSuccessCounter = int64(successMetric.GetMetric()[0].GetCounter().GetValue())
-
+		for _, totalMetric := range totalMetrics.GetMetric() {
+			logrus.Debugf("totalMetric: %+v", totalMetric)
+			for _, label := range totalMetric.GetLabel() {
+				if label.GetName() == "status" && label.GetValue() == "success" {
+					reloadSuccessCounter = int64(totalMetric.GetCounter().GetValue())
+				}
+			}
+		}
 		return true, nil
 	})
 
