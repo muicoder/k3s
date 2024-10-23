@@ -12,8 +12,8 @@ import (
 	"github.com/k3s-io/k3s/pkg/generated/controllers/k3s.cattle.io"
 	"github.com/k3s-io/kine/pkg/endpoint"
 	"github.com/rancher/wharfie/pkg/registries"
-	"github.com/rancher/wrangler/v3/pkg/generated/controllers/core"
-	"github.com/rancher/wrangler/v3/pkg/leader"
+	"github.com/rancher/wrangler/pkg/generated/controllers/core"
+	"github.com/rancher/wrangler/pkg/leader"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -153,10 +153,6 @@ type Agent struct {
 	DisableServiceLB        bool
 	EnableIPv4              bool
 	EnableIPv6              bool
-	VLevel                  int
-	VModule                 string
-	LogFile                 string
-	AlsoLogToStderr         bool
 }
 
 // CriticalControlArgs contains parameters that all control plane nodes in HA must share
@@ -241,8 +237,6 @@ type Control struct {
 	EtcdListFormat           string   `json:"-"`
 	EtcdS3                   *EtcdS3  `json:"-"`
 	ServerNodeName           string
-	VLevel                   int
-	VModule                  string
 
 	BindAddress string
 	SANs        []string

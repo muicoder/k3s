@@ -23,8 +23,8 @@ func Test_UnitGetConntrackConfig(t *testing.T) {
 	}
 
 	customConfig := defaultConfig.DeepCopy()
-	customConfig.Linux.Conntrack.Min = utilsptr.To(int32(100))
-	customConfig.Linux.Conntrack.TCPCloseWaitTimeout.Duration = 42 * time.Second
+	customConfig.Conntrack.Min = utilsptr.To(int32(100))
+	customConfig.Conntrack.TCPCloseWaitTimeout.Duration = 42 * time.Second
 
 	type args struct {
 		nodeConfig *daemonconfig.Node
@@ -44,7 +44,7 @@ func Test_UnitGetConntrackConfig(t *testing.T) {
 					},
 				},
 			},
-			want:    &defaultConfig.Linux.Conntrack,
+			want:    &defaultConfig.Conntrack,
 			wantErr: false,
 		},
 		{
@@ -56,7 +56,7 @@ func Test_UnitGetConntrackConfig(t *testing.T) {
 					},
 				},
 			},
-			want:    &defaultConfig.Linux.Conntrack,
+			want:    &defaultConfig.Conntrack,
 			wantErr: false,
 		},
 		{
@@ -80,7 +80,7 @@ func Test_UnitGetConntrackConfig(t *testing.T) {
 					},
 				},
 			},
-			want:    &customConfig.Linux.Conntrack,
+			want:    &customConfig.Conntrack,
 			wantErr: false,
 		},
 	}
