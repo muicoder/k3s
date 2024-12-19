@@ -1,7 +1,7 @@
 package config
 
 import (
-	"crypto/tls"
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,8 +12,8 @@ import (
 	"github.com/k3s-io/k3s/pkg/generated/controllers/k3s.cattle.io"
 	"github.com/k3s-io/kine/pkg/endpoint"
 	"github.com/rancher/wharfie/pkg/registries"
-	"github.com/rancher/wrangler/v3/pkg/generated/controllers/core"
-	"github.com/rancher/wrangler/v3/pkg/leader"
+	"github.com/rancher/wrangler/pkg/generated/controllers/core"
+	"github.com/rancher/wrangler/pkg/leader"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -57,7 +57,6 @@ type Node struct {
 	Images                   string
 	AgentConfig              Agent
 	Token                    string
-	Certificate              *tls.Certificate
 	ServerHTTPSPort          int
 	SupervisorPort           int
 	DefaultRuntime           string
@@ -375,9 +374,15 @@ type ControlRuntime struct {
 
 	K8s        kubernetes.Interface
 	K3s        *k3s.Factory
-	Core       *core.Factory
+	Core       CoreFactory
 	Event      record.EventRecorder
 	EtcdConfig endpoint.ETCDConfig
+}
+
+type CoreFactory interface {
+	Core() core.Interface
+	Sync(ctx context.Context) error
+	Start(ctx context.Context, defaultThreadiness int) error
 }
 
 func NewRuntime(containerRuntimeReady <-chan struct{}) *ControlRuntime {

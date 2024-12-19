@@ -35,8 +35,8 @@ import (
 	"github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	certutil "github.com/rancher/dynamiclistener/cert"
-	controllerv1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
-	"github.com/rancher/wrangler/v3/pkg/start"
+	controllerv1 "github.com/rancher/wrangler/pkg/generated/controllers/core/v1"
+	"github.com/rancher/wrangler/pkg/start"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
@@ -497,7 +497,7 @@ func (e *ETCD) Start(ctx context.Context, clientAccessInfo *clientaccess.Info) e
 			case <-time.After(30 * time.Second):
 				logrus.Infof("Waiting for container runtime to become ready before joining etcd cluster")
 			case <-e.config.Runtime.ContainerRuntimeReady:
-				if err := wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
+				if err := wait.PollImmediateUntilWithContext(ctx, time.Second, func(ctx context.Context) (bool, error) {
 					if err := e.join(ctx, clientAccessInfo); err != nil {
 						// Retry the join if waiting for another member to be promoted, or waiting for peers to connect after promotion
 						if errors.Is(err, rpctypes.ErrTooManyLearners) || errors.Is(err, rpctypes.ErrUnhealthy) {
@@ -559,6 +559,7 @@ func (e *ETCD) join(ctx context.Context, clientAccessInfo *clientaccess.Info) er
 	defer cancel()
 
 	var (
+		state   string
 		cluster []string
 		add     = true
 	)
@@ -620,12 +621,19 @@ func (e *ETCD) join(ctx context.Context, clientAccessInfo *clientaccess.Info) er
 			return err
 		}
 		cluster = append(cluster, fmt.Sprintf("%s=%s", e.name, e.peerURL()))
+		state = "existing"
+	} else if len(cluster) > 1 {
+		logrus.Infof("Starting etcd to join cluster with members %v", cluster)
+		state = "existing"
+	} else {
+		logrus.Infof("Starting etcd for new cluster")
+		state = "new"
 	}
 
-	logrus.Infof("Starting etcd to join cluster with members %v", cluster)
 	return e.cluster(ctx, false, executor.InitialOptions{
-		Cluster: strings.Join(cluster, ","),
-		State:   "existing",
+		AdvertisePeerURL: e.peerURL(),
+		Cluster:          strings.Join(cluster, ","),
+		State:            state,
 	})
 }
 
