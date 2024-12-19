@@ -69,7 +69,7 @@ func Prepare(ctx context.Context, nodeConfig *config.Node) error {
 func Run(ctx context.Context, nodeConfig *config.Node) error {
 	logrus.Infof("Starting flannel with backend %s", nodeConfig.FlannelBackend)
 
-	if err := util.WaitForRBACReady(ctx, nodeConfig.AgentConfig.KubeConfigK3sController, util.DefaultAPIServerReadyTimeout, authorizationv1.ResourceAttributes{
+	if err := util.WaitForRBACReady(ctx, nodeConfig.AgentConfig.KubeConfigKubeProxy, util.DefaultAPIServerReadyTimeout, authorizationv1.ResourceAttributes{
 		Verb:     "list",
 		Resource: "nodes",
 	}, ""); err != nil {

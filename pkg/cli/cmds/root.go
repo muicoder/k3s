@@ -19,7 +19,7 @@ var (
 	}
 	PreferBundledBin = &cli.BoolFlag{
 		Name:  "prefer-bundled-bin",
-		Usage: "(experimental) Prefer bundled userspace binaries over host binaries",
+		Usage: "Prefer bundled userspace binaries over host binaries",
 	}
 )
 

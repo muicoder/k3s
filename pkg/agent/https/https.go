@@ -11,7 +11,6 @@ import (
 	"github.com/k3s-io/k3s/pkg/generated/clientset/versioned/scheme"
 	"github.com/k3s-io/k3s/pkg/util"
 	"github.com/k3s-io/k3s/pkg/version"
-	"k8s.io/apiserver/pkg/apis/apiserver"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
@@ -64,9 +63,7 @@ func Start(ctx context.Context, nodeConfig *config.Node, runtime *config.Control
 		}
 
 		authn := options.NewDelegatingAuthenticationOptions()
-		authn.Anonymous = &apiserver.AnonymousAuthConfig{
-			Enabled: false,
-		}
+		authn.DisableAnonymous = true
 		authn.SkipInClusterLookup = true
 		authn.ClientCert = options.ClientCertAuthenticationOptions{
 			ClientCA: nodeConfig.AgentConfig.ClientCA,

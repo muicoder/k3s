@@ -16,12 +16,10 @@ import (
 	daemonconfig "github.com/k3s-io/k3s/pkg/daemons/config"
 	"github.com/k3s-io/k3s/pkg/daemons/executor"
 	"github.com/k3s-io/k3s/pkg/version"
-	"github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/component-base/logs"
-	logsapi "k8s.io/component-base/logs/api/v1"
 	logsv1 "k8s.io/component-base/logs/api/v1"
 	_ "k8s.io/component-base/metrics/prometheus/restclient" // for client metric registration
 	_ "k8s.io/component-base/metrics/prometheus/version"    // for version metric registration
@@ -34,7 +32,6 @@ import (
 
 func Agent(ctx context.Context, nodeConfig *daemonconfig.Node, proxy proxy.Proxy) error {
 	rand.Seed(time.Now().UTC().UnixNano())
-	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
 	logs.InitLogs()
 	defer logs.FlushLogs()
 
@@ -95,7 +92,7 @@ func ImageCredProvAvailable(cfg *daemonconfig.Agent) bool {
 	return true
 }
 
-// extractConfigArgs strips out any --config or --config-dir flags from the
+// extractConfigArgs strips out any --config flags from the
 // provided args list, and if set, copies the content of the file or dir into
 // the target drop-in directory.
 func extractConfigArgs(path string, extraArgs []string, config *kubeletconfig.KubeletConfiguration) ([]string, error) {
@@ -121,7 +118,7 @@ func extractConfigArgs(path string, extraArgs []string, config *kubeletconfig.Ku
 		}
 
 		switch key {
-		case "config", "config-dir":
+		case "config":
 			if val == "" {
 				return nil, fmt.Errorf("value required for kubelet-arg --%s", key)
 			}
@@ -137,14 +134,6 @@ func extractConfigArgs(path string, extraArgs []string, config *kubeletconfig.Ku
 		dest := filepath.Join(path, "10-cli-config.conf")
 		if err := util.CopyFile(src, dest, false); err != nil {
 			return nil, errors.Wrapf(err, "copy config %q into managed drop-in dir %q", src, dest)
-		}
-	}
-	// copy the config-dir into our managed config dir, unless its already in there
-	if strippedArgs["config-dir"] != "" && !strings.HasPrefix(strippedArgs["config-dir"], path) {
-		src := strippedArgs["config-dir"]
-		dest := filepath.Join(path, "20-cli-config-dir")
-		if err := copy.Copy(src, dest, copy.Options{PreserveOwner: true}); err != nil {
-			return nil, errors.Wrapf(err, "copy config-dir %q into managed drop-in dir %q", src, dest)
 		}
 	}
 	return args, nil
@@ -190,12 +179,12 @@ func defaultKubeletConfig(cfg *daemonconfig.Agent) (*kubeletconfig.KubeletConfig
 		SyncFrequency:                    metav1.Duration{Duration: time.Minute},
 		VolumeStatsAggPeriod:             metav1.Duration{Duration: time.Minute},
 		EvictionHard: map[string]string{
-			"imagefs.available": "5%",
-			"nodefs.available":  "5%",
+			"imagefs.available": "15%",
+			"nodefs.available":  "15%",
 		},
 		EvictionMinimumReclaim: map[string]string{
-			"imagefs.available": "10%",
-			"nodefs.available":  "10%",
+			"imagefs.available": "20%",
+			"nodefs.available":  "20%",
 		},
 		Authentication: kubeletconfig.KubeletAuthentication{
 			Anonymous: kubeletconfig.KubeletAnonymousAuthentication{
@@ -214,12 +203,9 @@ func defaultKubeletConfig(cfg *daemonconfig.Agent) (*kubeletconfig.KubeletConfig
 			},
 		},
 		Logging: logsv1.LoggingConfiguration{
-			Format:    "text",
-			Verbosity: logsv1.VerbosityLevel(cfg.VLevel),
-			FlushFrequency: logsv1.TimeOrMetaDuration{
-				Duration:          metav1.Duration{Duration: time.Second * 5},
-				SerializeAsString: true,
-			},
+			Format:         "text",
+			Verbosity:      logsv1.VerbosityLevel(0),
+			FlushFrequency: time.Second * 5,
 		},
 	}
 
@@ -256,8 +242,6 @@ func defaultKubeletConfig(cfg *daemonconfig.Agent) (*kubeletconfig.KubeletConfig
 	} else {
 		defaultConfig.RegisterWithTaints = t
 	}
-
-	logsv1.VModuleConfigurationPflag(&defaultConfig.Logging.VModule).Set(cfg.VModule)
 
 	return defaultConfig, nil
 }

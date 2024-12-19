@@ -124,7 +124,7 @@ var (
 	}
 	DockerFlag = &cli.BoolFlag{
 		Name:        "docker",
-		Usage:       "(agent/runtime) (experimental) Use cri-dockerd instead of containerd",
+		Usage:       "(agent/runtime) Use cri-dockerd instead of containerd",
 		Destination: &AgentConfig.Docker,
 	}
 	CRIEndpointFlag = &cli.StringFlag{
@@ -183,13 +183,13 @@ var (
 	}
 	VPNAuth = &cli.StringFlag{
 		Name:        "vpn-auth",
-		Usage:       "(agent/networking) (experimental) Credentials for the VPN provider. It must include the provider name and join key in the format name=<vpn-provider>,joinKey=<key>[,controlServerURL=<url>][,extraArgs=<args>]",
+		Usage:       "(agent/networking) Credentials for the VPN provider. It must include the provider name and join key in the format name=<vpn-provider>,joinKey=<key>[,controlServerURL=<url>][,extraArgs=<args>]",
 		EnvVar:      version.ProgramUpper + "_VPN_AUTH",
 		Destination: &AgentConfig.VPNAuth,
 	}
 	VPNAuthFile = &cli.StringFlag{
 		Name:        "vpn-auth-file",
-		Usage:       "(agent/networking) (experimental) File containing credentials for the VPN provider. It must include the provider name and join key in the format name=<vpn-provider>,joinKey=<key>[,controlServerURL=<url>][,extraArgs=<args>]",
+		Usage:       "(agent/networking) File containing credentials for the VPN provider. It must include the provider name and join key in the format name=<vpn-provider>,joinKey=<key>[,controlServerURL=<url>][,extraArgs=<args>]",
 		EnvVar:      version.ProgramUpper + "_VPN_AUTH_FILE",
 		Destination: &AgentConfig.VPNAuthFile,
 	}
@@ -233,7 +233,7 @@ var (
 	}
 	DisableAgentLBFlag = &cli.BoolFlag{
 		Name:        "disable-apiserver-lb",
-		Usage:       "(agent/networking) (experimental) Disable the agent's client-side load-balancer and connect directly to the configured server address",
+		Usage:       "(agent/networking) Disable the agent's client-side load-balancer and connect directly to the configured server address",
 		Destination: &AgentConfig.DisableLoadBalancer,
 	}
 	DisableDefaultRegistryEndpointFlag = &cli.BoolFlag{
@@ -248,7 +248,7 @@ var (
 	}
 	EnablePProfFlag = &cli.BoolFlag{
 		Name:        "enable-pprof",
-		Usage:       "(experimental) Enable pprof endpoint on supervisor port",
+		Usage:       "Enable pprof endpoint on supervisor port",
 		Destination: &AgentConfig.EnablePProf,
 	}
 	BindAddressFlag = &cli.StringFlag{
@@ -326,7 +326,7 @@ func NewAgentCommand(action func(ctx *cli.Context) error) cli.Command {
 			EnablePProfFlag,
 			&cli.BoolFlag{
 				Name:        "rootless",
-				Usage:       "(experimental) Run rootless",
+				Usage:       "Run rootless",
 				Destination: &AgentConfig.Rootless,
 			},
 			PreferBundledBin,

@@ -27,9 +27,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 	toolswatch "k8s.io/client-go/tools/watch"
 	cloudproviderapi "k8s.io/cloud-provider/api"
-	logsapi "k8s.io/component-base/logs/api/v1"
 	"k8s.io/kubernetes/pkg/kubeapiserver/authorizer/modes"
-	"k8s.io/kubernetes/pkg/registry/core/node"
+	node "k8s.io/kubernetes/pkg/proxy/util"
 
 	// for client metric registration
 	_ "k8s.io/component-base/metrics/prometheus/restclient"
@@ -38,7 +37,6 @@ import (
 func Server(ctx context.Context, cfg *config.Control) error {
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
 	if err := prepare(ctx, cfg); err != nil {
 		return errors.Wrap(err, "preparing server")
 	}
@@ -128,13 +126,6 @@ func controllerManager(ctx context.Context, cfg *config.Control) error {
 		argsMap["controllers"] = argsMap["controllers"] + ",-service,-route,-cloud-node-lifecycle"
 	}
 
-	if cfg.VLevel != 0 {
-		argsMap["v"] = strconv.Itoa(cfg.VLevel)
-	}
-	if cfg.VModule != "" {
-		argsMap["vmodule"] = cfg.VModule
-	}
-
 	args := config.GetArgs(argsMap, cfg.ExtraControllerArgs)
 	logrus.Infof("Running kube-controller-manager %s", config.ArgString(args))
 
@@ -153,13 +144,6 @@ func scheduler(ctx context.Context, cfg *config.Control) error {
 	}
 	if cfg.NoLeaderElect {
 		argsMap["leader-elect"] = "false"
-	}
-
-	if cfg.VLevel != 0 {
-		argsMap["v"] = strconv.Itoa(cfg.VLevel)
-	}
-	if cfg.VModule != "" {
-		argsMap["vmodule"] = cfg.VModule
 	}
 
 	args := config.GetArgs(argsMap, cfg.ExtraSchedulerAPIArgs)
@@ -254,13 +238,6 @@ func apiServer(ctx context.Context, cfg *config.Control) error {
 		argsMap["encryption-provider-config"] = runtime.EncryptionConfig
 		argsMap["encryption-provider-config-automatic-reload"] = "true"
 	}
-	if cfg.VLevel != 0 {
-		argsMap["v"] = strconv.Itoa(cfg.VLevel)
-	}
-	if cfg.VModule != "" {
-		argsMap["vmodule"] = cfg.VModule
-	}
-
 	args := config.GetArgs(argsMap, cfg.ExtraAPIArgs)
 
 	logrus.Infof("Running kube-apiserver %s", config.ArgString(args))
@@ -369,13 +346,6 @@ func cloudControllerManager(ctx context.Context, cfg *config.Control) error {
 	if cfg.DisableServiceLB {
 		argsMap["controllers"] = argsMap["controllers"] + ",-service"
 	}
-	if cfg.VLevel != 0 {
-		argsMap["v"] = strconv.Itoa(cfg.VLevel)
-	}
-	if cfg.VModule != "" {
-		argsMap["vmodule"] = cfg.VModule
-	}
-
 	args := config.GetArgs(argsMap, cfg.ExtraCloudControllerArgs)
 
 	logrus.Infof("Running cloud-controller-manager %s", config.ArgString(args))

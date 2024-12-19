@@ -20,7 +20,7 @@ import (
 	"github.com/rancher/dynamiclistener/storage/file"
 	"github.com/rancher/dynamiclistener/storage/kubernetes"
 	"github.com/rancher/dynamiclistener/storage/memory"
-	"github.com/rancher/wrangler/v3/pkg/generated/controllers/core"
+	"github.com/rancher/wrangler/pkg/generated/controllers/core"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -141,9 +141,13 @@ func (c *Cluster) initClusterAndHTTPS(ctx context.Context) error {
 func tlsStorage(ctx context.Context, dataDir string, runtime *config.ControlRuntime) dynamiclistener.TLSStorage {
 	fileStorage := file.New(filepath.Join(dataDir, "tls/dynamic-cert.json"))
 	cache := memory.NewBacked(fileStorage)
-	return kubernetes.New(ctx, func() *core.Factory {
-		return runtime.Core
-	}, metav1.NamespaceSystem, version.Program+"-serving", cache)
+	coreGetter := func() *core.Factory {
+		if coreFactory, ok := runtime.Core.(*core.Factory); ok {
+			return coreFactory
+		}
+		return nil
+	}
+	return kubernetes.New(ctx, coreGetter, metav1.NamespaceSystem, version.Program+"-serving", cache)
 }
 
 // wrapHandler wraps the dynamiclistener request handler, adding a User-Agent value to

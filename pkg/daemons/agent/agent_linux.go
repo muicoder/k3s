@@ -6,7 +6,6 @@ package agent
 import (
 	"net"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/k3s-io/k3s/pkg/cgroups"
@@ -50,18 +49,6 @@ func kubeProxyArgs(cfg *config.Agent) map[string]string {
 	if cfg.NodeName != "" {
 		argsMap["hostname-override"] = cfg.NodeName
 	}
-	if cfg.VLevel != 0 {
-		argsMap["v"] = strconv.Itoa(cfg.VLevel)
-	}
-	if cfg.VModule != "" {
-		argsMap["vmodule"] = cfg.VModule
-	}
-	if cfg.LogFile != "" {
-		argsMap["log_file"] = cfg.LogFile
-	}
-	if cfg.AlsoLogToStderr {
-		argsMap["alsologtostderr"] = "true"
-	}
 	return argsMap
 }
 
@@ -75,7 +62,6 @@ func kubeletArgsAndConfig(cfg *config.Agent) (map[string]string, *kubeletconfig.
 		return nil, nil, err
 	}
 	argsMap := map[string]string{
-		"config-dir": cfg.KubeletConfigDir,
 		"kubeconfig": cfg.KubeConfigKubelet,
 	}
 
@@ -92,16 +78,19 @@ func kubeletArgsAndConfig(cfg *config.Agent) (map[string]string, *kubeletconfig.
 		}
 		// cadvisor wants the containerd CRI socket without the prefix, but kubelet wants it with the prefix
 		if strings.HasPrefix(cfg.RuntimeSocket, socketPrefix) {
-			defaultConfig.ContainerRuntimeEndpoint = cfg.RuntimeSocket
+			argsMap["container-runtime-endpoint"] = cfg.RuntimeSocket
 		} else {
-			defaultConfig.ContainerRuntimeEndpoint = socketPrefix + cfg.RuntimeSocket
+			argsMap["container-runtime-endpoint"] = socketPrefix + cfg.RuntimeSocket
 		}
+	}
+	if cfg.PauseImage != "" {
+		argsMap["pod-infra-container-image"] = cfg.PauseImage
 	}
 	if cfg.ImageServiceSocket != "" {
 		if strings.HasPrefix(cfg.ImageServiceSocket, socketPrefix) {
-			defaultConfig.ImageServiceEndpoint = cfg.ImageServiceSocket
+			argsMap["image-service-endpoint"] = cfg.ImageServiceSocket
 		} else {
-			defaultConfig.ImageServiceEndpoint = socketPrefix + cfg.ImageServiceSocket
+			argsMap["image-service-endpoint"] = socketPrefix + cfg.ImageServiceSocket
 		}
 	}
 	if cfg.NodeName != "" {
