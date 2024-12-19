@@ -191,21 +191,21 @@ var ServerFlags = []cli.Flag{
 	&cli.IntFlag{
 		Name:        "supervisor-port",
 		EnvVar:      version.ProgramUpper + "_SUPERVISOR_PORT",
-		Usage:       "(experimental) Supervisor listen port override",
+		Usage:       "Supervisor listen port override",
 		Hidden:      true,
 		Destination: &ServerConfig.SupervisorPort,
 	},
 	&cli.IntFlag{
 		Name:        "apiserver-port",
 		EnvVar:      version.ProgramUpper + "_APISERVER_PORT",
-		Usage:       "(experimental) apiserver internal listen port override",
+		Usage:       "apiserver internal listen port override",
 		Hidden:      true,
 		Destination: &ServerConfig.APIServerPort,
 	},
 	&cli.StringFlag{
 		Name:        "apiserver-bind-address",
 		EnvVar:      version.ProgramUpper + "_APISERVER_BIND_ADDRESS",
-		Usage:       "(experimental) apiserver internal bind address override",
+		Usage:       "apiserver internal bind address override",
 		Hidden:      true,
 		Destination: &ServerConfig.APIServerBindAddress,
 	},
@@ -339,7 +339,7 @@ var ServerFlags = []cli.Flag{
 	},
 	&cli.BoolFlag{
 		Name:        "kine-tls",
-		Usage:       "(experimental/db) Enable TLS on the kine etcd server socket",
+		Usage:       "(db) Enable TLS on the kine etcd server socket",
 		Destination: &ServerConfig.KineTLS,
 		Hidden:      true,
 	},
@@ -512,19 +512,19 @@ var ServerFlags = []cli.Flag{
 	&cli.BoolFlag{
 		Name:        "disable-apiserver",
 		Hidden:      true,
-		Usage:       "(experimental/components) Disable running api server",
+		Usage:       "(components) Disable running api server",
 		Destination: &ServerConfig.DisableAPIServer,
 	},
 	&cli.BoolFlag{
 		Name:        "disable-controller-manager",
 		Hidden:      true,
-		Usage:       "(experimental/components) Disable running kube-controller-manager",
+		Usage:       "(components) Disable running kube-controller-manager",
 		Destination: &ServerConfig.DisableControllerManager,
 	},
 	&cli.BoolFlag{
 		Name:        "disable-etcd",
 		Hidden:      true,
-		Usage:       "(experimental/components) Disable running etcd",
+		Usage:       "(components) Disable running etcd",
 		Destination: &ServerConfig.DisableETCD,
 	},
 	&cli.BoolFlag{
@@ -534,7 +534,7 @@ var ServerFlags = []cli.Flag{
 	},
 	&cli.BoolFlag{
 		Name:        "supervisor-metrics",
-		Usage:       "(experimental/components) Enable serving " + version.Program + " internal metrics on the supervisor port; when enabled agents will also listen on the supervisor port",
+		Usage:       "(components) Enable serving " + version.Program + " internal metrics on the supervisor port; when enabled agents will also listen on the supervisor port",
 		Destination: &ServerConfig.SupervisorMetrics,
 	},
 	NodeNameFlag,
@@ -581,7 +581,7 @@ var ServerFlags = []cli.Flag{
 	EnablePProfFlag,
 	&cli.BoolFlag{
 		Name:        "rootless",
-		Usage:       "(experimental) Run rootless",
+		Usage:       "Run rootless",
 		Destination: &ServerConfig.Rootless,
 	},
 	PreferBundledBin,

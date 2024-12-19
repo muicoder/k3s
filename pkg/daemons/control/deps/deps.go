@@ -30,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apiserver/pkg/apis/apiserver"
-	apiserverconfigv1 "k8s.io/apiserver/pkg/apis/apiserver/v1"
+	apiserverconfigv1 "k8s.io/apiserver/pkg/apis/config/v1"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/client-go/util/keyutil"
 )
@@ -391,11 +391,11 @@ func genClientCerts(config *config.Control) error {
 		}
 	}
 
-	if _, err = factory(user.KubeProxy, nil, runtime.ClientKubeProxyCert, runtime.ClientKubeProxyKey); err != nil {
+	if _, _, err := certutil.LoadOrGenerateKeyFile(runtime.ClientKubeProxyKey, regen); err != nil {
 		return err
 	}
-	// This user (system:k3s-controller by default) must be bound to a role in rolebindings.yaml or the downstream equivalent
-	if _, err = factory("system:"+version.Program+"-controller", nil, runtime.ClientK3sControllerCert, runtime.ClientK3sControllerKey); err != nil {
+
+	if _, _, err := certutil.LoadOrGenerateKeyFile(runtime.ClientK3sControllerKey, regen); err != nil {
 		return err
 	}
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,7 +20,7 @@ import (
 	"github.com/k3s-io/k3s/pkg/untar"
 	"github.com/k3s-io/k3s/pkg/version"
 	"github.com/pkg/errors"
-	"github.com/rancher/wrangler/v3/pkg/resolvehome"
+	"github.com/rancher/wrangler/pkg/resolvehome"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/urfave/cli"
@@ -214,18 +213,17 @@ func stageAndRun(dataDir, cmd string, args []string, calledAsInternal bool) erro
 	pathList := []string{
 		filepath.Clean(filepath.Join(dir, "..", "cni")),
 		filepath.Join(dir, "bin"),
+		filepath.Join(dir, "bin", "aux"),
 	}
 	if findPreferBundledBin(args) {
 		pathList = append(
 			pathList,
-			filepath.Join(dir, "bin", "aux"),
 			os.Getenv("PATH"),
 		)
 	} else {
 		pathList = append(
 			pathList,
 			os.Getenv("PATH"),
-			filepath.Join(dir, "bin", "aux"),
 		)
 	}
 	if err := os.Setenv("PATH", strings.Join(pathList, string(os.PathListSeparator))); err != nil {
@@ -292,14 +290,12 @@ func extract(dataDir string) (string, error) {
 	}
 	buf := bytes.NewBuffer(content)
 
-	tempDest := dir + "-tmp"
-	defer os.RemoveAll(tempDest)
-	os.RemoveAll(tempDest)
+	os.RemoveAll(dir)
 
-	if err := untar.Untar(buf, tempDest); err != nil {
+	if err := untar.Untar(buf, dir); err != nil {
 		return "", err
 	}
-	if err := dataverify.Verify(filepath.Join(tempDest, "bin")); err != nil {
+	if err := dataverify.Verify(filepath.Join(dir, "bin")); err != nil {
 		return "", err
 	}
 
@@ -321,17 +317,17 @@ func extract(dataDir string) (string, error) {
 	// Non-symlink plugins in the stable CNI bin dir will not be overwritten, to allow users to replace our
 	// CNI plugins with their own versions if they want. Note that the cni multicall binary itself is always
 	// symlinked into the stable bin dir and should not be replaced.
-	ents, err := os.ReadDir(filepath.Join(tempDest, "bin"))
+	ents, err := os.ReadDir(filepath.Join(dir, "bin"))
 	if err != nil {
 		return "", err
 	}
 	for _, ent := range ents {
-		if info, err := ent.Info(); err == nil && info.Mode()&fs.ModeSymlink != 0 {
-			if target, err := os.Readlink(filepath.Join(tempDest, "bin", ent.Name())); err == nil && target == "cni" {
+		if info, err := ent.Info(); err == nil && info.Mode()&os.ModeSymlink == os.ModeSymlink {
+			if target, err := os.Readlink(filepath.Join(dir, "bin", ent.Name())); err == nil && target == "cni" {
 				src := filepath.Join(cniPath, ent.Name())
 				// Check if plugin already exists in stable CNI bin dir
 				if info, err := os.Lstat(src); err == nil {
-					if info.Mode()&fs.ModeSymlink != 0 {
+					if info.Mode()&os.ModeSymlink == os.ModeSymlink {
 						// Exists and is a symlink, remove it so we can create a new symlink for the new bin.
 						os.Remove(src)
 					} else {
@@ -358,12 +354,6 @@ func extract(dataDir string) (string, error) {
 		}
 	}
 	if err := os.Symlink(dir, currentSymLink); err != nil {
-		return "", err
-	}
-
-	// Rename the new directory into place after updating symlinks, so that the k3s binary check at the start
-	// of this function only succeeds if everything else has been completed successfully.
-	if err := os.Rename(tempDest, dir); err != nil {
 		return "", err
 	}
 

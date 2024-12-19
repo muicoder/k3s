@@ -5,6 +5,7 @@ package config
 
 import (
 	"errors"
+	"github.com/k3s-io/k3s/pkg/version"
 	"os"
 	"path/filepath"
 
@@ -14,12 +15,12 @@ import (
 )
 
 func applyContainerdStateAndAddress(nodeConfig *config.Node) {
-	nodeConfig.Containerd.State = "/run/k3s/containerd"
+	nodeConfig.Containerd.State = "/run/" + version.Program + "/containerd"
 	nodeConfig.Containerd.Address = filepath.Join(nodeConfig.Containerd.State, "containerd.sock")
 }
 
 func applyCRIDockerdAddress(nodeConfig *config.Node) {
-	nodeConfig.CRIDockerd.Address = "unix:///run/k3s/cri-dockerd/cri-dockerd.sock"
+	nodeConfig.CRIDockerd.Address = "unix:///run/" + version.Program + "/cri-dockerd/cri-dockerd.sock"
 }
 
 func applyContainerdQoSClassConfigFileIfPresent(envInfo *cmds.Agent, containerdConfig *config.Containerd) {
