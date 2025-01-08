@@ -27,7 +27,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/pkg/errors"
-	"github.com/rancher/wrangler/v3/pkg/generated/controllers/core"
+	"github.com/rancher/wrangler/pkg/generated/controllers/core"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -168,6 +168,12 @@ func (c *Controller) GetClient(ctx context.Context, etcdS3 *config.EtcdS3) (*Cli
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 
+	// Set this value so that the underlying transport round-tripper
+	// doesn't try to auto decode the body of objects with
+	// content-encoding set to `gzip`.
+	// Ref: https://github.com/minio/minio-go/pull/752
+	tr.DisableCompression = true
+
 	// You can either disable SSL verification or use a custom CA bundle,
 	// it doesn't make sense to do both - if verification is disabled,
 	// the CA is not checked!
@@ -199,14 +205,21 @@ func (c *Controller) GetClient(ctx context.Context, etcdS3 *config.EtcdS3) (*Cli
 		tr.Proxy = http.ProxyURL(u)
 	}
 
-	var creds *credentials.Credentials
-	if len(etcdS3.AccessKey) == 0 && len(etcdS3.SecretKey) == 0 {
-		creds = credentials.NewIAM("") // for running on ec2 instance
-		if _, err := creds.Get(); err != nil {
-			return nil, errors.Wrap(err, "failed to get IAM credentials")
-		}
-	} else {
-		creds = credentials.NewStaticV4(etcdS3.AccessKey, etcdS3.SecretKey, "")
+	creds := credentials.NewChainCredentials([]credentials.Provider{
+		&credentials.Static{
+			Value: credentials.Value{
+				AccessKeyID:     etcdS3.AccessKey,
+				SecretAccessKey: etcdS3.SecretKey,
+				SessionToken:    etcdS3.SessionToken,
+				SignerType:      credentials.SignatureV4,
+			},
+		},
+		&credentials.FileAWSCredentials{},
+		&credentials.IAM{},
+	})
+
+	if _, err := creds.Get(); err != nil {
+		return nil, errors.Wrap(err, "failed to get credentials")
 	}
 
 	opt := minio.Options{

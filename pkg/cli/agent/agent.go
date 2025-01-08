@@ -21,7 +21,7 @@ import (
 	"github.com/k3s-io/k3s/pkg/util"
 	"github.com/k3s-io/k3s/pkg/version"
 	"github.com/k3s-io/k3s/pkg/vpn"
-	"github.com/rancher/wrangler/v3/pkg/signals"
+	"github.com/rancher/wrangler/pkg/signals"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -90,7 +90,6 @@ func Run(ctx *cli.Context) error {
 
 	contextCtx := signals.SetupSignalContext()
 
-	go cmds.WriteCoverage(contextCtx)
 	if cfg.VPNAuthFile != "" {
 		cfg.VPNAuth, err = util.ReadFile(cfg.VPNAuthFile)
 		if err != nil {

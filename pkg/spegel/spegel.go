@@ -216,13 +216,10 @@ func (c *Config) Start(ctx context.Context, nodeConfig *config.Node) error {
 		registry.WithLogger(logr.FromContextOrDiscard(ctx)),
 	}
 	reg := registry.NewRegistry(ociClient, router, registryOpts...)
-	regSvr := reg.Server(":" + c.RegistryPort)
-
-	// Close router on shutdown
-	go func() {
-		<-ctx.Done()
-		router.Close()
-	}()
+	regSvr, err := reg.Server(":" + c.RegistryPort)
+	if err != nil {
+		return errors.Wrap(err, "failed to create spegel registry server")
+	}
 
 	// Track images available in containerd and publish via p2p router
 	go state.Track(ctx, ociClient, router, resolveLatestTag)
@@ -236,8 +233,8 @@ func (c *Config) Start(ctx context.Context, nodeConfig *config.Node) error {
 
 	// Wait up to 5 seconds for the p2p network to find peers. This will return
 	// immediately if the node is bootstrapping from itself.
-	_ = wait.PollUntilContextTimeout(ctx, time.Second, resolveTimeout, true, func(_ context.Context) (bool, error) {
-		return router.Ready()
+	_ = wait.PollImmediateWithContext(ctx, time.Second, resolveTimeout, func(_ context.Context) (bool, error) {
+		return router.Ready(ctx)
 	})
 
 	return nil
@@ -247,11 +244,12 @@ func (c *Config) Start(ctx context.Context, nodeConfig *config.Node) error {
 func (c *Config) peerInfo() http.HandlerFunc {
 	return http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 		client, _, _ := net.SplitHostPort(req.RemoteAddr)
-		info, err := c.Bootstrapper.Get()
-		if err != nil {
+		infos, err := c.Bootstrapper.Get(req.Context())
+		if err != nil || len(infos) == 0 {
 			http.Error(resp, "Internal Error", http.StatusInternalServerError)
 			return
 		}
+		info := infos[0]
 		logrus.Debugf("Serving p2p peer addr %s to client at %s", info, client)
 		resp.WriteHeader(http.StatusOK)
 		resp.Header().Set("Content-Type", "text/plain")
