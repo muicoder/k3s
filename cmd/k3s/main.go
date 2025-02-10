@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,7 +20,7 @@ import (
 	"github.com/k3s-io/k3s/pkg/untar"
 	"github.com/k3s-io/k3s/pkg/version"
 	"github.com/pkg/errors"
-	"github.com/rancher/wrangler/v3/pkg/resolvehome"
+	"github.com/rancher/wrangler/pkg/resolvehome"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/urfave/cli"
@@ -326,12 +325,12 @@ func extract(dataDir string) (string, error) {
 		return "", err
 	}
 	for _, ent := range ents {
-		if info, err := ent.Info(); err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		if info, err := ent.Info(); err == nil && info.Mode()&os.ModeSymlink == os.ModeSymlink {
 			if target, err := os.Readlink(filepath.Join(tempDest, "bin", ent.Name())); err == nil && target == "cni" {
 				src := filepath.Join(cniPath, ent.Name())
 				// Check if plugin already exists in stable CNI bin dir
 				if info, err := os.Lstat(src); err == nil {
-					if info.Mode()&fs.ModeSymlink != 0 {
+					if info.Mode()&os.ModeSymlink == os.ModeSymlink {
 						// Exists and is a symlink, remove it so we can create a new symlink for the new bin.
 						os.Remove(src)
 					} else {

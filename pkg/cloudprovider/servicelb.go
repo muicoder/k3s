@@ -9,15 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"sigs.k8s.io/yaml"
-
 	"github.com/k3s-io/k3s/pkg/util"
 	"github.com/k3s-io/k3s/pkg/version"
-	"github.com/rancher/wrangler/v3/pkg/condition"
-	coreclient "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
-	discoveryclient "github.com/rancher/wrangler/v3/pkg/generated/controllers/discovery/v1"
-	"github.com/rancher/wrangler/v3/pkg/merr"
-	"github.com/rancher/wrangler/v3/pkg/objectset"
+	"github.com/rancher/wrangler/pkg/condition"
+	coreclient "github.com/rancher/wrangler/pkg/generated/controllers/core/v1"
+	discoveryclient "github.com/rancher/wrangler/pkg/generated/controllers/discovery/v1"
+	"github.com/rancher/wrangler/pkg/merr"
+	"github.com/rancher/wrangler/pkg/objectset"
 	"github.com/sirupsen/logrus"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
@@ -29,10 +27,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
-	"k8s.io/cloud-provider/names"
+	"k8s.io/cloud-provider/app"
 	servicehelper "k8s.io/cloud-provider/service/helpers"
 	utilsnet "k8s.io/utils/net"
 	utilsptr "k8s.io/utils/ptr"
+	"sigs.k8s.io/yaml"
 )
 
 var (
@@ -44,7 +43,7 @@ var (
 	nodeSelectorLabel      = "svccontroller." + version.Program + ".cattle.io/nodeselector"
 	priorityAnnotation     = "svccontroller." + version.Program + ".cattle.io/priorityclassname"
 	tolerationsAnnotation  = "svccontroller." + version.Program + ".cattle.io/tolerations"
-	controllerName         = names.ServiceLBController
+	controllerName         = app.DefaultInitFuncConstructors["service"].InitContext.ClientName
 )
 
 const (
@@ -562,7 +561,7 @@ func (k *k3s) newDaemonSet(svc *core.Service) (*apps.DaemonSet, error) {
 					Name: "DEST_IPS",
 					ValueFrom: &core.EnvVarSource{
 						FieldRef: &core.ObjectFieldSelector{
-							FieldPath: "status.hostIPs",
+							FieldPath: "status.hostIP",
 						},
 					},
 				},
