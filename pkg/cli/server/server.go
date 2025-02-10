@@ -30,14 +30,14 @@ import (
 	"github.com/k3s-io/k3s/pkg/version"
 	"github.com/k3s-io/k3s/pkg/vpn"
 	"github.com/pkg/errors"
-	"github.com/rancher/wrangler/v3/pkg/signals"
+	"github.com/rancher/wrangler/pkg/signals"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	etcdversion "go.etcd.io/etcd/api/v3/version"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 	kubeapiserverflag "k8s.io/component-base/cli/flag"
-	"k8s.io/kubernetes/pkg/controlplane/apiserver/options"
+	"k8s.io/kubernetes/pkg/controlplane"
 	utilsnet "k8s.io/utils/net"
 )
 
@@ -356,7 +356,7 @@ func run(app *cli.Context, cfg *cmds.Server, leaderControllers server.CustomCont
 	}
 
 	// the apiserver service does not yet support dual-stack operation
-	_, apiServerServiceIP, err := options.ServiceIPRange(*serverConfig.ControlConfig.ServiceIPRanges[0])
+	_, apiServerServiceIP, err := controlplane.ServiceIPRange(*serverConfig.ControlConfig.ServiceIPRanges[0])
 	if err != nil {
 		return err
 	}
@@ -509,7 +509,6 @@ func run(app *cli.Context, cfg *cmds.Server, leaderControllers server.CustomCont
 		return err
 	}
 
-	go cmds.WriteCoverage(ctx)
 
 	go func() {
 		if !serverConfig.ControlConfig.DisableAPIServer {
