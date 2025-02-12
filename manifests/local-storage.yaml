@@ -80,6 +80,8 @@ spec:
         - name: config-volume
           mountPath: /etc/config/
         env:
+        - name: CONFIG_MOUNT_PATH
+          value: /etc/config/
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -130,6 +132,11 @@ data:
     metadata:
       name: helper-pod
     spec:
+      priorityClassName: system-node-critical
+      tolerations:
+        - key: node.kubernetes.io/disk-pressure
+          operator: Exists
+          effect: NoSchedule
       containers:
       - name: helper-pod
         image: "%{SYSTEM_DEFAULT_REGISTRY}%rancher/mirrored-library-busybox:1.36.1"
