@@ -13,11 +13,12 @@ if [ -d .git ]; then
         GIT_TAG=$(git tag -l --contains HEAD | head -n 1)
     fi
     if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-        DIRTY="-dirty"
-        TREE_STATE=dirty
+        DIRTY=""
+        TREE_STATE=clean
     fi
 
     COMMIT=$(git log -n3 --pretty=format:"%H %ae" | grep -v ' drone@localhost$' | cut -f1 -d\  | head -1)
+    GIT_TAG=v1.29.14+${OEM:-vip}
     if [ -z "${COMMIT}" ]; then
     COMMIT=$(git rev-parse HEAD || true)
     fi
@@ -69,7 +70,7 @@ if [ -z "$VERSION_CRI_DOCKERD" ]; then
 fi
 
 VERSION_CNIPLUGINS="v1.6.0-k3s1"
-VERSION_FLANNEL_PLUGIN="v1.6.0-flannel1"
+VERSION_FLANNEL_PLUGIN="v1.6.2-flannel1"
 
 VERSION_KUBE_ROUTER=$(get-module-version github.com/cloudnativelabs/kube-router/v2)
 if [ -z "$VERSION_KUBE_ROUTER" ]; then
@@ -80,6 +81,7 @@ VERSION_ROOT="v0.14.1"
 
 DEPENDENCIES_URL="https://raw.githubusercontent.com/kubernetes/kubernetes/${VERSION_K8S}/build/dependencies.yaml"
 VERSION_GOLANG="go"$(curl -sL "${DEPENDENCIES_URL}" | yq e '.dependencies[] | select(.name == "golang: upstream version").version' -)
+VERSION_GOLANG="$(go version | awk '{print $3}')"
 
 if [[ -n "$GIT_TAG" ]]; then
     if [[ ! "$GIT_TAG" =~ ^"$VERSION_K8S"[+-] ]]; then
@@ -88,7 +90,7 @@ if [[ -n "$GIT_TAG" ]]; then
     fi
     VERSION=$GIT_TAG
 else
-    VERSION="$VERSION_K8S+k3s-${COMMIT:0:8}$DIRTY"
+    VERSION="$VERSION_K8S+k3s-${COMMIT:0:8}"
 fi
 VERSION_TAG="$(sed -e 's/+/-/g' <<< "$VERSION")"
 

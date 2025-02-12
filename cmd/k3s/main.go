@@ -3,8 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +20,7 @@ import (
 	"github.com/k3s-io/k3s/pkg/flock"
 	"github.com/k3s-io/k3s/pkg/untar"
 	"github.com/k3s-io/k3s/pkg/version"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/rancher/wrangler/pkg/resolvehome"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
@@ -89,7 +89,7 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil && !errors.Is(err, context.Canceled) {
-		logrus.Fatal(err)
+		logrus.Fatalf("Error: %v", err)
 	}
 }
 
@@ -207,7 +207,7 @@ func stageAndRunCLI(cli *cli.Context, cmd string, dataDir string, args []string)
 func stageAndRun(dataDir, cmd string, args []string, calledAsInternal bool) error {
 	dir, err := extract(dataDir)
 	if err != nil {
-		return errors.Wrap(err, "extracting data")
+		return pkgerrors.WithMessage(err, "extracting data")
 	}
 	logrus.Debugf("Asset dir %s", dir)
 
@@ -326,12 +326,12 @@ func extract(dataDir string) (string, error) {
 		return "", err
 	}
 	for _, ent := range ents {
-		if info, err := ent.Info(); err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		if info, err := ent.Info(); err == nil && info.Mode()&os.ModeSymlink == os.ModeSymlink {
 			if target, err := os.Readlink(filepath.Join(tempDest, "bin", ent.Name())); err == nil && target == "cni" {
 				src := filepath.Join(cniPath, ent.Name())
 				// Check if plugin already exists in stable CNI bin dir
 				if info, err := os.Lstat(src); err == nil {
-					if info.Mode()&fs.ModeSymlink != 0 {
+					if info.Mode()&os.ModeSymlink == os.ModeSymlink {
 						// Exists and is a symlink, remove it so we can create a new symlink for the new bin.
 						os.Remove(src)
 					} else {

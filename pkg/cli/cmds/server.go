@@ -92,6 +92,7 @@ type Server struct {
 	EtcdExposeMetrics        bool
 	EtcdSnapshotDir          string
 	EtcdSnapshotCron         string
+	EtcdSnapshotReconcile    time.Duration
 	EtcdSnapshotRetention    int
 	EtcdSnapshotCompress     bool
 	EtcdListFormat           string
@@ -144,7 +145,7 @@ var (
 	}
 	ClusterDNS = &cli.StringSliceFlag{
 		Name:  "cluster-dns",
-		Usage: "(networking) IPv4 Cluster IP for coredns service. Should be in your service-cidr range (default: 10.43.0.10)",
+		Usage: "(networking) IPv4/IPv6 Cluster IP for coredns service. Should be in your service-cidr range (default: 10.43.0.10)",
 		Value: &ServerConfig.ClusterDNS,
 	}
 	ClusterDomain = &cli.StringFlag{
@@ -389,6 +390,12 @@ var ServerFlags = []cli.Flag{
 		Usage:       "(db) Snapshot interval time in cron spec. eg. every 5 hours '0 */5 * * *'",
 		Destination: &ServerConfig.EtcdSnapshotCron,
 		Value:       "0 */12 * * *",
+	},
+	&cli.DurationFlag{
+		Name:        "etcd-snapshot-reconcile-interval",
+		Usage:       "(db) Snapshot reconcile interval",
+		Destination: &ServerConfig.EtcdSnapshotReconcile,
+		Value:       10 * time.Minute,
 	},
 	&cli.IntFlag{
 		Name:        "etcd-snapshot-retention",

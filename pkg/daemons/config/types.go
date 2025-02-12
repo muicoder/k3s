@@ -118,6 +118,7 @@ type Agent struct {
 	ClusterDomain           string
 	ResolvConf              string
 	RootDir                 string
+	KubeletConfigDir        string
 	KubeConfigKubelet       string
 	KubeConfigKubeProxy     string
 	KubeConfigK3sController string
@@ -233,17 +234,18 @@ type Control struct {
 	ClusterResetRestorePath  string
 	MinTLSVersion            string
 	CipherSuites             []string
-	TLSMinVersion            uint16   `json:"-"`
-	TLSCipherSuites          []uint16 `json:"-"`
-	EtcdSnapshotName         string   `json:"-"`
-	EtcdDisableSnapshots     bool     `json:"-"`
-	EtcdExposeMetrics        bool     `json:"-"`
-	EtcdSnapshotDir          string   `json:"-"`
-	EtcdSnapshotCron         string   `json:"-"`
-	EtcdSnapshotRetention    int      `json:"-"`
-	EtcdSnapshotCompress     bool     `json:"-"`
-	EtcdListFormat           string   `json:"-"`
-	EtcdS3                   *EtcdS3  `json:"-"`
+	TLSMinVersion            uint16          `json:"-"`
+	TLSCipherSuites          []uint16        `json:"-"`
+	EtcdSnapshotName         string          `json:"-"`
+	EtcdDisableSnapshots     bool            `json:"-"`
+	EtcdExposeMetrics        bool            `json:"-"`
+	EtcdSnapshotDir          string          `json:"-"`
+	EtcdSnapshotCron         string          `json:"-"`
+	EtcdSnapshotReconcile    metav1.Duration `json:"-"`
+	EtcdSnapshotRetention    int             `json:"-"`
+	EtcdSnapshotCompress     bool            `json:"-"`
+	EtcdListFormat           string          `json:"-"`
+	EtcdS3                   *EtcdS3         `json:"-"`
 	ServerNodeName           string
 	VLevel                   int
 	VModule                  string
@@ -310,7 +312,6 @@ type ControlRuntimeBootstrap struct {
 type ControlRuntime struct {
 	ControlRuntimeBootstrap
 
-	HTTPBootstrap                        bool
 	APIServerReady                       <-chan struct{}
 	ContainerRuntimeReady                <-chan struct{}
 	ETCDReady                            <-chan struct{}
@@ -340,6 +341,7 @@ type ControlRuntime struct {
 	AgentToken         string
 	APIServer          http.Handler
 	Handler            http.Handler
+	HTTPBootstrap      http.Handler
 	Tunnel             http.Handler
 	Authenticator      authenticator.Request
 
