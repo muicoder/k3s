@@ -80,7 +80,7 @@ func WaitForAPIServerReady(ctx context.Context, kubeconfigPath string, timeout t
 		return err
 	}
 
-	err = wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+	err = wait.PollUntilContextTimeout(ctx, time.Second*2, timeout, true, func(ctx context.Context) (bool, error) {
 		healthStatus := 0
 		result := restClient.Get().AbsPath("/readyz").Do(ctx).StatusCode(&healthStatus)
 		if rerr := result.Error(); rerr != nil {
