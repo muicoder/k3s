@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 
@@ -118,6 +117,7 @@ type Agent struct {
 	ClusterDomain           string
 	ResolvConf              string
 	RootDir                 string
+	KubeletConfigDir        string
 	KubeConfigKubelet       string
 	KubeConfigKubeProxy     string
 	KubeConfigK3sController string
@@ -176,6 +176,7 @@ type CriticalControlArgs struct {
 	DisableNPC            bool         `cli:"disable-network-policy"`
 	DisableServiceLB      bool         `cli:"disable-service-lb"`
 	EncryptSecrets        bool         `cli:"secrets-encryption"`
+	EncryptProvider       string       `cli:"secrets-encryption-provider"`
 	EmbeddedRegistry      bool         `cli:"embedded-registry"`
 	FlannelBackend        string       `cli:"flannel-backend"`
 	FlannelIPv6Masq       bool         `cli:"flannel-ipv6-masq"`
@@ -254,6 +255,7 @@ type Control struct {
 	SANSecurity bool
 	PrivateIP   string
 	Runtime     *ControlRuntime `json:"-"`
+	Cluster     Cluster         `json:"-"`
 }
 
 // BindAddressOrLoopback returns an IPv4 or IPv6 address suitable for embedding in
@@ -311,9 +313,6 @@ type ControlRuntimeBootstrap struct {
 type ControlRuntime struct {
 	ControlRuntimeBootstrap
 
-	APIServerReady                       <-chan struct{}
-	ContainerRuntimeReady                <-chan struct{}
-	ETCDReady                            <-chan struct{}
 	StartupHooksWg                       *sync.WaitGroup
 	ClusterControllerStarts              map[string]leader.Callback
 	LeaderElectedClusterControllerStarts map[string]leader.Callback
@@ -380,15 +379,20 @@ type ControlRuntime struct {
 	EtcdConfig endpoint.ETCDConfig
 }
 
+type Cluster interface {
+	Bootstrap(ctx context.Context, reset bool) error
+	ListenAndServe(ctx context.Context) error
+	Start(ctx context.Context) error
+}
+
 type CoreFactory interface {
 	Core() core.Interface
 	Sync(ctx context.Context) error
 	Start(ctx context.Context, defaultThreadiness int) error
 }
 
-func NewRuntime(containerRuntimeReady <-chan struct{}) *ControlRuntime {
+func NewRuntime() *ControlRuntime {
 	return &ControlRuntime{
-		ContainerRuntimeReady:                containerRuntimeReady,
 		ClusterControllerStarts:              map[string]leader.Callback{},
 		LeaderElectedClusterControllerStarts: map[string]leader.Callback{},
 	}
@@ -405,80 +409,4 @@ func (a ArgString) String() string {
 		b.WriteString(s)
 	}
 	return b.String()
-}
-
-// GetArgs appends extra arguments to existing arguments with logic to override any default
-// arguments whilst also allowing to prefix and suffix default string slice arguments.
-func GetArgs(initialArgs map[string]string, extraArgs []string) []string {
-	const hyphens = "--"
-
-	multiArgs := make(map[string][]string)
-
-	for _, unsplitArg := range extraArgs {
-		splitArg := strings.SplitN(strings.TrimPrefix(unsplitArg, hyphens), "=", 2)
-		arg := splitArg[0]
-		value := "true"
-		if len(splitArg) > 1 {
-			value = splitArg[1]
-		}
-
-		// After the first iteration, initial args will be empty when handling
-		// duplicate arguments as they will form part of existingValues
-		cleanedArg := strings.TrimRight(arg, "-+")
-		initialValue, initialValueExists := initialArgs[cleanedArg]
-		existingValues, existingValuesFound := multiArgs[cleanedArg]
-
-		newValues := make([]string, 0)
-		if strings.HasSuffix(arg, "+") { // Append value to initial args
-			if initialValueExists {
-				newValues = append(newValues, initialValue)
-			}
-			if existingValuesFound {
-				newValues = append(newValues, existingValues...)
-			}
-			newValues = append(newValues, value)
-
-		} else if strings.HasSuffix(arg, "-") { // Prepend value to initial args
-			newValues = append(newValues, value)
-			if initialValueExists {
-				newValues = append(newValues, initialValue)
-			}
-			if existingValuesFound {
-				newValues = append(newValues, existingValues...)
-			}
-		} else { // Append value ignoring initial args
-			if existingValuesFound {
-				newValues = append(newValues, existingValues...)
-			}
-			newValues = append(newValues, value)
-		}
-
-		delete(initialArgs, cleanedArg)
-		multiArgs[cleanedArg] = newValues
-
-	}
-
-	// Add any remaining initial args to the map
-	for arg, value := range initialArgs {
-		multiArgs[arg] = []string{value}
-	}
-
-	// Get args so we can output them sorted whilst preserving the order of
-	// repeated keys
-	var keys []string
-	for arg := range multiArgs {
-		keys = append(keys, arg)
-	}
-	sort.Strings(keys)
-
-	var args []string
-	for _, arg := range keys {
-		values := multiArgs[arg]
-		for _, value := range values {
-			cmd := fmt.Sprintf("%s%s=%s", hyphens, strings.TrimPrefix(arg, hyphens), value)
-			args = append(args, cmd)
-		}
-	}
-
-	return args
 }

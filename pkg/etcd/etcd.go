@@ -33,7 +33,7 @@ import (
 	"github.com/k3s-io/k3s/pkg/version"
 	"github.com/k3s-io/kine/pkg/client"
 	endpoint2 "github.com/k3s-io/kine/pkg/endpoint"
-	cp "github.com/otiai10/copy"
+	"github.com/otiai10/copy"
 	pkgerrors "github.com/pkg/errors"
 	certutil "github.com/rancher/dynamiclistener/cert"
 	controllerv1 "github.com/rancher/wrangler/pkg/generated/controllers/core/v1"
@@ -343,7 +343,7 @@ func (e *ETCD) IsInitialized() (bool, error) {
 func (e *ETCD) Reset(ctx context.Context, rebootstrap func() error) error {
 	// Wait for etcd to come up as a new single-node cluster, then exit
 	go func() {
-		<-e.config.Runtime.ContainerRuntimeReady
+		<-executor.CRIReadyChan()
 		t := time.NewTicker(5 * time.Second)
 		defer t.Stop()
 		for range t.C {
@@ -497,7 +497,7 @@ func (e *ETCD) Start(ctx context.Context, clientAccessInfo *clientaccess.Info) e
 			select {
 			case <-time.After(30 * time.Second):
 				logrus.Infof("Waiting for container runtime to become ready before joining etcd cluster")
-			case <-e.config.Runtime.ContainerRuntimeReady:
+			case <-executor.CRIReadyChan():
 				if err := wait.PollUntilContextCancel(ctx, time.Second, true, func(ctx context.Context) (bool, error) {
 					if err := e.join(ctx, clientAccessInfo); err != nil {
 						// Retry the join if waiting for another member to be promoted, or waiting for peers to connect after promotion
@@ -726,11 +726,15 @@ func (e *ETCD) handler(next http.Handler) http.Handler {
 }
 
 // infoHandler returns etcd cluster information. This is used by new members when joining the cluster.
-// If we can't retrieve an actual MemberList from etcd, we return a canned response with only the local node listed.
 func (e *ETCD) infoHandler() http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
 			util.SendError(fmt.Errorf("method not allowed"), rw, req, http.StatusMethodNotAllowed)
+			return
+		}
+
+		if e.client == nil {
+			util.SendError(errors.New("failed to get etcd MemberList: etcd not started"), rw, req, http.StatusInternalServerError)
 			return
 		}
 
@@ -1005,7 +1009,7 @@ func (e *ETCD) listenClientHTTPURLs() string {
 // cluster calls the executor to start etcd running with the provided configuration.
 func (e *ETCD) cluster(ctx context.Context, reset bool, options executor.InitialOptions) error {
 	ctx, e.cancel = context.WithCancel(ctx)
-	return executor.ETCD(ctx, executor.ETCDConfig{
+	return executor.ETCD(ctx, &executor.ETCDConfig{
 		Name:                e.name,
 		InitialOptions:      options,
 		ForceNewCluster:     reset,
@@ -1031,11 +1035,13 @@ func (e *ETCD) cluster(ctx context.Context, reset bool, options executor.Initial
 		HeartbeatInterval:    500,
 		Logger:               "zap",
 		LogOutputs:           []string{"stderr"},
+		ReuseAddress:         true,
+		ReusePort:            true,
 		ListenClientHTTPURLs: e.listenClientHTTPURLs(),
 
 		ExperimentalInitialCorruptCheck:         true,
 		ExperimentalWatchProgressNotifyInterval: e.config.Datastore.NotifyInterval,
-	}, e.config.ExtraEtcdArgs)
+	}, e.config.ExtraEtcdArgs, e.Test)
 }
 
 func (e *ETCD) StartEmbeddedTemporary(ctx context.Context) error {
@@ -1066,7 +1072,7 @@ func (e *ETCD) StartEmbeddedTemporary(ctx context.Context) error {
 		conn.Close()
 	}()
 
-	if err := cp.Copy(etcdDataDir, tmpDataDir, cp.Options{PreserveOwner: true}); err != nil {
+	if err := copy.Copy(etcdDataDir, tmpDataDir, copy.Options{PreserveOwner: true}); err != nil {
 		return err
 	}
 
@@ -1085,7 +1091,7 @@ func (e *ETCD) StartEmbeddedTemporary(ctx context.Context) error {
 
 	embedded := executor.Embedded{}
 	ctx, e.cancel = context.WithCancel(ctx)
-	return embedded.ETCD(ctx, executor.ETCDConfig{
+	return embedded.ETCD(ctx, &executor.ETCDConfig{
 		InitialOptions:       executor.InitialOptions{AdvertisePeerURL: peerURL},
 		DataDir:              tmpDataDir,
 		ForceNewCluster:      true,
@@ -1094,15 +1100,17 @@ func (e *ETCD) StartEmbeddedTemporary(ctx context.Context) error {
 		ListenClientHTTPURLs: clientHTTPURL,
 		ListenPeerURLs:       peerURL,
 		Logger:               "zap",
+		LogOutputs:           []string{"stderr"},
+		ReuseAddress:         true,
+		ReusePort:            true,
 		HeartbeatInterval:    500,
 		ElectionTimeout:      5000,
 		SnapshotCount:        10000,
 		Name:                 e.name,
-		LogOutputs:           []string{"stderr"},
 
 		ExperimentalInitialCorruptCheck:         true,
 		ExperimentalWatchProgressNotifyInterval: e.config.Datastore.NotifyInterval,
-	}, append(e.config.ExtraEtcdArgs, "--max-snapshots=0", "--max-wals=0"))
+	}, append(e.config.ExtraEtcdArgs, "--max-snapshots=0", "--max-wals=0"), e.Test)
 }
 
 func addPort(address string, offset int) (string, error) {
@@ -1157,7 +1165,7 @@ func (e *ETCD) RemovePeer(ctx context.Context, name, address string, allowSelfRe
 // being promoted to full voting member. The checks only run on the cluster member that is
 // the etcd leader.
 func (e *ETCD) manageLearners(ctx context.Context) {
-	<-e.config.Runtime.ContainerRuntimeReady
+	<-executor.CRIReadyChan()
 	t := time.NewTicker(manageTickerTime)
 	defer t.Stop()
 
