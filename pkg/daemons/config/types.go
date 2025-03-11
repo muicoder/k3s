@@ -118,6 +118,7 @@ type Agent struct {
 	ClusterDomain           string
 	ResolvConf              string
 	RootDir                 string
+	KubeletConfigDir        string
 	KubeConfigKubelet       string
 	KubeConfigKubeProxy     string
 	KubeConfigK3sController string
@@ -254,6 +255,7 @@ type Control struct {
 	SANSecurity bool
 	PrivateIP   string
 	Runtime     *ControlRuntime `json:"-"`
+	Cluster     Cluster         `json:"-"`
 }
 
 // BindAddressOrLoopback returns an IPv4 or IPv6 address suitable for embedding in
@@ -311,9 +313,6 @@ type ControlRuntimeBootstrap struct {
 type ControlRuntime struct {
 	ControlRuntimeBootstrap
 
-	APIServerReady                       <-chan struct{}
-	ContainerRuntimeReady                <-chan struct{}
-	ETCDReady                            <-chan struct{}
 	StartupHooksWg                       *sync.WaitGroup
 	ClusterControllerStarts              map[string]leader.Callback
 	LeaderElectedClusterControllerStarts map[string]leader.Callback
@@ -380,15 +379,20 @@ type ControlRuntime struct {
 	EtcdConfig endpoint.ETCDConfig
 }
 
+type Cluster interface {
+	Bootstrap(ctx context.Context, reset bool) error
+	ListenAndServe(ctx context.Context) error
+	Start(ctx context.Context) error
+}
+
 type CoreFactory interface {
 	Core() core.Interface
 	Sync(ctx context.Context) error
 	Start(ctx context.Context, defaultThreadiness int) error
 }
 
-func NewRuntime(containerRuntimeReady <-chan struct{}) *ControlRuntime {
+func NewRuntime() *ControlRuntime {
 	return &ControlRuntime{
-		ContainerRuntimeReady:                containerRuntimeReady,
 		ClusterControllerStarts:              map[string]leader.Callback{},
 		LeaderElectedClusterControllerStarts: map[string]leader.Callback{},
 	}
