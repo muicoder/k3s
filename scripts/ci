@@ -1,10 +1,14 @@
 #!/bin/bash
 set -e
 
+export ARCH=$(go env GOHOSTARCH)
+go mod tidy && go mod vendor
+git diff | grep "^[+-]" || pwd
 SCRIPT_DIR=$(dirname $0)
 pushd $SCRIPT_DIR
 
 ./download
+unset SKIP_VALIDATE
 ./validate
 ./build
 ./package
