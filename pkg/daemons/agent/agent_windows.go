@@ -48,7 +48,7 @@ func kubeletArgsAndConfig(cfg *config.Agent) (map[string]string, *kubeletconfig.
 		return nil, nil, err
 	}
 	argsMap := map[string]string{
-		"config-dir": cfg.KubeletConfigDir,
+		"config":     filepath.Join(cfg.KubeletConfigDir, "kubelet.conf"),
 		"kubeconfig": cfg.KubeConfigKubelet,
 	}
 	if cfg.RootDir != "" {
@@ -59,16 +59,16 @@ func kubeletArgsAndConfig(cfg *config.Agent) (map[string]string, *kubeletconfig.
 		defaultConfig.SerializeImagePulls = utilsptr.To(false)
 		// cadvisor wants the containerd CRI socket without the prefix, but kubelet wants it with the prefix
 		if strings.HasPrefix(cfg.RuntimeSocket, socketPrefix) {
-			defaultConfig.ContainerRuntimeEndpoint = cfg.RuntimeSocket
+			argsMap["container-runtime-endpoint"] = cfg.RuntimeSocket
 		} else {
-			defaultConfig.ContainerRuntimeEndpoint = socketPrefix + cfg.RuntimeSocket
+			argsMap["container-runtime-endpoint"] = socketPrefix + cfg.RuntimeSocket
 		}
 	}
 	if cfg.ImageServiceSocket != "" {
 		if strings.HasPrefix(cfg.ImageServiceSocket, socketPrefix) {
-			defaultConfig.ImageServiceEndpoint = cfg.ImageServiceSocket
+			argsMap["image-service-endpoint"] = cfg.ImageServiceSocket
 		} else {
-			defaultConfig.ImageServiceEndpoint = socketPrefix + cfg.ImageServiceSocket
+			argsMap["image-service-endpoint"] = socketPrefix + cfg.ImageServiceSocket
 		}
 	}
 	if cfg.NodeName != "" {
