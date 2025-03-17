@@ -144,7 +144,7 @@ func WaitForRBACReady(ctx context.Context, kubeconfigPath string, timeout time.D
 		reviewFunc = subjectAccessReview(authClient, ra, user, groups)
 	}
 
-	err = wait.PollUntilContextTimeout(ctx, time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+	err = wait.PollUntilContextTimeout(ctx, time.Second*2, timeout, true, func(ctx context.Context) (bool, error) {
 		status, rerr := reviewFunc(ctx)
 		if rerr != nil {
 			lastErr = rerr
