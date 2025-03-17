@@ -203,7 +203,7 @@ func (c *Config) Start(ctx context.Context, nodeConfig *config.Node) error {
 		libp2p.Peerstore(ps),
 		libp2p.PrivateNetwork(c.PSK),
 	}
-	router, err := routing.NewP2PRouter(ctx, routerAddr, c.Bootstrapper, c.RegistryPort, opts...)
+	router, err := routing.NewP2PRouter(ctx, routerAddr, c.Bootstrapper, c.RegistryPort, routing.LibP2POptions(opts...))
 	if err != nil {
 		return pkgerrors.WithMessage(err, "failed to create P2P router")
 	}
@@ -216,7 +216,6 @@ func (c *Config) Start(ctx context.Context, nodeConfig *config.Node) error {
 	client := clientaccess.GetHTTPClient(caCert, c.ClientCertFile, c.ClientKeyFile)
 	metrics.Register()
 	registryOpts := []registry.Option{
-		registry.WithLocalAddress(localAddr),
 		registry.WithResolveLatestTag(resolveLatestTag),
 		registry.WithResolveRetries(resolveRetries),
 		registry.WithResolveTimeout(resolveTimeout),
