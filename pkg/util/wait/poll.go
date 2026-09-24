@@ -404,3 +404,19 @@ func PollJitterUntil(interval time.Duration, jitter float64, condition Condition
 		next:      fixedInterval(interval, jitter),
 	}, lift(condition))
 }
+
+func PollJitterUntilWithContext(ctx context.Context, interval time.Duration, jitter float64, immediate bool, condition ConditionWithContextFunc, stopCh <-chan struct{}) error {
+	ctx, cancel := chanToCtx(ctx, stopCh)
+	defer cancel()
+	return run(ctx, pollConfig{
+		immediate: immediate,
+		next:      fixedInterval(interval, jitter),
+	}, condition)
+}
+
+func PollImmediateUntilWithContext(ctx context.Context, interval time.Duration, condition ConditionWithContextFunc) error {
+	return run(ctx, pollConfig{
+		immediate: true,
+		next:      fixedInterval(interval, 0),
+	}, condition)
+}
