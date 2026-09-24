@@ -108,11 +108,16 @@ func run(ctx context.Context, cfg pollConfig, cond ConditionWithContextFunc) err
 }
 
 func backoffInterval(b Backoff) intervalGen {
-	if b.Duration <= 0 {
+	if b.Duration <= 0 || b.Steps <= 0 {
 		return func() (time.Duration, bool) { return 0, false }
 	}
 	local := b
+	count := 0
 	return func() (time.Duration, bool) {
+		if count >= b.Steps {
+			return 0, false
+		}
+		count++
 		return local.Step(), true
 	}
 }
@@ -133,6 +138,29 @@ func chanToCtx(parent context.Context, stopCh <-chan struct{}) (context.Context,
 		}
 	}()
 	return ctx, cancel
+}
+
+type channelContext struct {
+	stopCh <-chan struct{}
+}
+
+func (c channelContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+
+func (c channelContext) Done() <-chan struct{} { return c.stopCh }
+
+func (c channelContext) Err() error {
+	select {
+	case <-c.Done():
+		return context.Canceled
+	default:
+		return nil
+	}
+}
+
+func (c channelContext) Value(key interface{}) interface{} { return nil }
+
+func ContextForChannel(parentCh <-chan struct{}) context.Context {
+	return channelContext{stopCh: parentCh}
 }
 
 func fixedInterval(interval time.Duration, jitter float64) intervalGen {
